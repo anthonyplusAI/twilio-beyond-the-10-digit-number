@@ -29,9 +29,16 @@ The Twilio Bank account, merchant, charge, and illustrated phone screens are fic
 
 ## Optional: send a real RCS test
 
-A sender that is still under review can send to a device invited as a tester after the device owner accepts **Make me a tester**. Twilio documents the [RCS onboarding and invitation flow](https://www.twilio.com/docs/rcs/onboarding) and a [rich-card tester walkthrough](https://www.twilio.com/en-us/blog/developers/tutorials/product/build-rcs-business-messaging-campaign-twilio). Use your own RCS-capable tester device. Console asks for a sender logo, banner, contact details, and business links; follow the current asset specifications in [Twilio’s onboarding guide](https://www.twilio.com/docs/rcs/onboarding). Real sender branding follows that Console profile and may differ from the fictional Twilio Bank illustration.
+A sender that is still under review can send to a device invited as a tester after the device owner accepts **Make me a tester**. Twilio documents the [RCS onboarding and invitation flow](https://www.twilio.com/docs/rcs/onboarding) and a [rich-card tester walkthrough](https://www.twilio.com/en-us/blog/developers/tutorials/product/build-rcs-business-messaging-campaign-twilio). Use your own RCS-capable tester device. Real sender branding follows its Console profile and may differ from the fictional Twilio Bank illustration.
 
-1. On a paid Twilio account, create an RCS Sender in Console. Invite your phone as a test device, accept the invitation on that phone, and add the sender to a Messaging Service. [RCS onboarding](https://www.twilio.com/docs/rcs/onboarding)
+For an authorized Twilio sender, the profile images are ready to host:
+
+- [Sender logo PNG](public/rcs-sender-logo.png): 224 × 224 pixels, 7,734 bytes.
+- [Sender banner PNG](public/rcs-sender-banner.png): 1440 × 448 pixels, 13,802 bytes.
+
+Both use the actual Twilio Bug. The editable SVG sources are beside the PNGs. Twilio requires the PNGs at public HTTPS URLs for the sender profile; the logo appears in conversations and the banner appears on supported Android profiles. [RCS onboarding and image requirements](https://www.twilio.com/docs/rcs/onboarding)
+
+1. Host the sender logo and banner at public HTTPS URLs. You can upload them as Twilio **Public Assets** and click **Deploy All**. In a paid Twilio account, create an RCS Sender using those URLs and its actual business details. Invite your phone as a test device, accept the invitation on that phone, and add the sender to a Messaging Service. [Public Assets](https://www.twilio.com/docs/serverless/functions-assets/assets) · [RCS onboarding](https://www.twilio.com/docs/rcs/onboarding)
 2. Copy .env.example to .env. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, DEMO_TO_NUMBER (your accepted tester in E.164), and TWILIO_MESSAGING_SERVICE_SID.
 3. Set TWILIO_RCS_CONTENT_SID to an existing HX Content Template SID with a rich card. To create the sample for this story, upload [the card image](public/rcs-alert-card.png) as a Twilio **Public Asset**, deploy it, and put its public HTTPS URL in TWILIO_RCS_MEDIA_URL. Run the command below and copy the returned HX SID into .env. The helper creates a template; it does not send a message. [Public Assets](https://www.twilio.com/docs/serverless/functions-assets/assets) · [Content API](https://www.twilio.com/docs/content/content-api-resources) · [Card format](https://www.twilio.com/docs/content/twiliocard)
 
@@ -41,7 +48,7 @@ A sender that is still under review can send to a device invited as a tester aft
 
 The sample template has a twilio/card type for RCS and a twilio/text type for fallback. Twilio can attempt RCS first and fall back to SMS or MMS when the Messaging Service has suitable senders in its pool. The architecture screen illustrates that production path. For an unapproved sender, use the accepted tester; do not count on an uninvited device to demonstrate fallback. [RCS sending and fallback](https://www.twilio.com/docs/rcs/send-an-rcs-message) · [RCS onboarding](https://www.twilio.com/docs/rcs/onboarding)
 
-The app does not receive inbound message webhooks. Tapping a quick reply on a real phone does not advance the bank story; use the presenter controls for the narrative. Handling replies would require an inbound [Messaging webhook](https://www.twilio.com/docs/messaging/guides/webhook-request). No public tunnel is needed for the current outbound demo; only the card image needs a public HTTPS URL.
+The app does not receive inbound message webhooks. Tapping a quick reply on a real phone does not advance the bank story; use the presenter controls for the narrative. Handling replies would require an inbound [Messaging webhook](https://www.twilio.com/docs/messaging/guides/webhook-request). No public tunnel is needed for the current outbound demo; the logo, banner, and card image need public HTTPS URLs.
 
 ## Optional: place a real branded call
 

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#edf2f7" />
+    <meta name="description" content="Fictional Twilio Bank webinar demo: an unknown call, a rich RCS alert, and a branded call." />
+    <title>Twilio Bank · Branded communications demo</title>
+    <script>
+      try {
+        document.documentElement.dataset.theme = localStorage.getItem('twilio-bank-theme-v2') || 'light';
+      } catch (_) {}
+    </script>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/phone.css" />
+  </head>
+  <body>
+    <div id="app"><div class="loading-screen"><div class="loading-mark">••<br />••</div><p>Opening Twilio Bank…</p></div></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

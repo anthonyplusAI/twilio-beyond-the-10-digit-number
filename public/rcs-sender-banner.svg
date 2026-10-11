@@ -1,6 +1,33 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="448" viewBox="0 0 1440 448" role="img" aria-label="Twilio sender banner">
-  <rect width="1440" height="448" fill="#EF223A"/>
-  <g transform="translate(610 114) scale(4.782608695652174)">
-    <path fill="#FFFFFF" d="M17.25 33.17C19.69 33.17 21.67 31.19 21.67 28.75C21.67 26.31 19.69 24.33 17.25 24.33C14.81 24.33 12.83 26.31 12.83 28.75C12.83 31.19 14.81 33.17 17.25 33.17ZM17.25 21.67C19.69 21.67 21.67 19.69 21.67 17.25C21.67 14.81 19.69 12.83 17.25 12.83C14.81 12.83 12.83 14.81 12.83 17.25C12.83 19.69 14.81 21.67 17.25 21.67ZM28.75 33.17C31.19 33.17 33.17 31.19 33.17 28.75C33.17 26.31 31.19 24.33 28.75 24.33C26.31 24.33 24.33 26.31 24.33 28.75C24.33 31.19 26.31 33.17 28.75 33.17ZM28.75 21.67C31.19 21.67 33.17 19.69 33.17 17.25C33.17 14.81 31.19 12.83 28.75 12.83C26.31 12.83 24.33 14.81 24.33 17.25C24.33 19.69 26.31 21.67 28.75 21.67ZM23 0C35.46 0 46 10.54 46 23C46 35.46 35.46 46 23 46C10.54 46 0 35.46 0 23C0 10.54 10.54 0 23 0ZM23 6.19C13.74 6.19 6.19 13.48 6.19 22.69C6.19 31.9 13.74 39.81 23 39.81C32.26 39.81 39.81 31.9 39.81 22.69C39.81 13.48 32.26 6.19 23 6.19Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="448" viewBox="0 0 1440 448" role="img" aria-label="Twilio Bank sender banner">
+  <defs>
+    <linearGradient id="card" x1="0" y1="0" x2="1" y2="0.45">
+      <stop offset="0" stop-color="#08192F"/>
+      <stop offset="0.48" stop-color="#182A43"/>
+      <stop offset="1" stop-color="#8B1F3A"/>
+    </linearGradient>
+    <linearGradient id="red-glow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#EF223A" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#EF223A" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="card-clip">
+      <rect x="88" y="34" width="1264" height="380" rx="32"/>
+    </clipPath>
+  </defs>
+
+  <rect width="1440" height="448" fill="#EDF2F7"/>
+  <rect x="88" y="34" width="1264" height="380" rx="32" fill="url(#card)"/>
+
+  <g clip-path="url(#card-clip)">
+    <circle cx="1205" cy="213" r="360" fill="url(#red-glow)"/>
+    <circle cx="1260" cy="24" r="306" fill="none" stroke="#FFFFFF" stroke-opacity="0.13" stroke-width="2"/>
+    <circle cx="1260" cy="24" r="365" fill="none" stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="2"/>
+    <circle cx="1260" cy="24" r="426" fill="none" stroke="#FFFFFF" stroke-opacity="0.05" stroke-width="2"/>
+
+    <g opacity="0.85" transform="translate(206 176)">
+      <rect width="74" height="54" rx="10" fill="#E4BAC0"/>
+      <path d="M24 0v54M49 0v54M0 27h74" fill="none" stroke="#6C3A47" stroke-opacity="0.38" stroke-width="1.5"/>
+    </g>
   </g>
+
+  <text x="720" y="265" text-anchor="middle" fill="#FFFFFF" font-family="Avenir Next, Arial, sans-serif" font-size="106" letter-spacing="-5"><tspan font-weight="800">twilio</tspan><tspan dx="15" font-weight="400">bank</tspan></text>
 </svg>

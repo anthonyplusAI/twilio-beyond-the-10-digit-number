@@ -31,14 +31,14 @@ The Twilio Bank account, merchant, charge, and illustrated phone screens are fic
 
 A sender that is still under review can send to a device invited as a tester after the device owner accepts **Make me a tester**. Twilio documents the [RCS onboarding and invitation flow](https://www.twilio.com/docs/rcs/onboarding) and a [rich-card tester walkthrough](https://www.twilio.com/en-us/blog/developers/tutorials/product/build-rcs-business-messaging-campaign-twilio). Use your own RCS-capable tester device. Real sender branding follows its Console profile and may differ from the fictional Twilio Bank illustration.
 
-For an authorized Twilio sender, the profile images are ready to host:
+For the fictional Twilio Bank sender profile in this webinar, the images are ready to host:
 
-- [Sender logo PNG](public/rcs-sender-logo.png): 224 × 224 pixels, 7,734 bytes.
-- [Sender banner PNG](public/rcs-sender-banner.png): 1440 × 448 pixels, 13,802 bytes.
+- [Sender logo PNG](public/rcs-sender-logo.png): 224 × 224 pixels.
+- [Sender banner PNG](public/rcs-sender-banner.png): 1440 × 448 pixels.
 
-Both use the actual Twilio Bug. The editable SVG sources are beside the PNGs. Twilio requires the PNGs at public HTTPS URLs for the sender profile; the logo appears in conversations and the banner appears on supported Android profiles. [RCS onboarding and image requirements](https://www.twilio.com/docs/rcs/onboarding)
+The square logo uses the Twilio Bug; the banner is branded for the fictional Twilio Bank. The editable SVG sources are beside the PNGs. Twilio requires public image URLs for the sender profile; the logo appears in conversations and the banner appears on Android. [RCS onboarding and image requirements](https://www.twilio.com/docs/rcs/onboarding)
 
-1. Host the sender logo and banner at public HTTPS URLs. You can upload them as Twilio **Public Assets** and click **Deploy All**. In a paid Twilio account, create an RCS Sender using those URLs and its actual business details. Invite your phone as a test device, accept the invitation on that phone, and add the sender to a Messaging Service. [Public Assets](https://www.twilio.com/docs/serverless/functions-assets/assets) · [RCS onboarding](https://www.twilio.com/docs/rcs/onboarding)
+1. Host the sender logo and banner at public HTTPS URLs. You can upload them as Twilio **Public Assets** and click **Deploy All**. In a paid Twilio account, create an RCS Sender test profile using those URLs. Invite your phone as a test device, accept the invitation on that phone, and add the sender to a Messaging Service. Before submitting a sender for production approval, use business details and brand assets that can be verified; carriers review the public display name and logo. [Public Assets](https://www.twilio.com/docs/serverless/functions-assets/assets) · [RCS onboarding](https://www.twilio.com/docs/rcs/onboarding) · [US RCS guidelines](https://www.twilio.com/en-us/guidelines/us/rcs)
 2. Copy .env.example to .env. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, DEMO_TO_NUMBER (your accepted tester in E.164), and TWILIO_MESSAGING_SERVICE_SID.
 3. Set TWILIO_RCS_CONTENT_SID to an existing HX Content Template SID with a rich card. To create the sample for this story, upload [the card image](public/rcs-alert-card.png) as a Twilio **Public Asset**, deploy it, and put its public HTTPS URL in TWILIO_RCS_MEDIA_URL. Run the command below and copy the returned HX SID into .env. The helper creates a template; it does not send a message. [Public Assets](https://www.twilio.com/docs/serverless/functions-assets/assets) · [Content API](https://www.twilio.com/docs/content/content-api-resources) · [Card format](https://www.twilio.com/docs/content/twiliocard)
 

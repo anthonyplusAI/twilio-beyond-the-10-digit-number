@@ -27,6 +27,8 @@ const SOURCES = {
   rcsOnboarding: 'https://www.twilio.com/docs/rcs/onboarding',
   rcsTutorial: 'https://www.twilio.com/en-us/blog/developers/tutorials/product/build-rcs-business-messaging-campaign-twilio',
   rcsSend: 'https://www.twilio.com/docs/rcs/send-an-rcs-message',
+  messagingServices: 'https://www.twilio.com/docs/messaging/services',
+  tollFreeUseCases: 'https://www.twilio.com/docs/messaging/compliance/toll-free/console-onboarding',
   card: 'https://www.twilio.com/docs/content/twiliocard',
   contentApi: 'https://www.twilio.com/docs/content/content-api-resources',
   calls: 'https://www.twilio.com/docs/voice/api/call-resource',
@@ -46,14 +48,15 @@ const SOURCES = {
 };
 
 const SCENES = {
-  idle: { chapter: 'The customer view', caption: 'Anthony checks his accounts on an ordinary afternoon.', short: 'Ready to begin', cue: 'Introduce Anthony Dellavecchia and the fictional Twilio Bank account. One card charge will anchor the entire story.' },
-  flagged: { chapter: 'The moment that matters', caption: 'A $9,800.00 vehicle deposit needs Anthony’s attention.', short: 'Purchase flagged', cue: 'A $9,800.00 vehicle deposit is flagged. Our goal is to reach Anthony quickly enough to review it.' },
+  idle: { chapter: 'The customer account', caption: 'Anthony’s account on an ordinary afternoon.', short: 'Ready to begin', cue: 'Introduce Anthony Dellavecchia and the fictional Twilio Bank account. The audience sees the account view; Anthony has not opened the app yet.' },
+  flagged: { chapter: 'The moment that matters', caption: 'The bank flags a $9,800.00 vehicle deposit that needs review.', short: 'Purchase flagged', cue: 'The bank flags the $9,800.00 charge. Anthony has not seen the app alert, so the bank must reach him through another channel.' },
   unknownRinging: { chapter: 'Attempt 1 · Unknown number', caption: 'The call arrives without a recognizable identity.', short: 'Unknown call ringing', cue: 'Pause on the phone. Ask the audience whether they would answer this unknown number.' },
-  unknownMissed: { chapter: 'Attempt 1 · Missed', caption: 'Anthony ignores the call, and the charge remains unconfirmed.', short: 'Call ignored', cue: 'This is the cost of low trust: an important alert is still unresolved.' },
-  rewound: { chapter: 'Replay · Same purchase', caption: 'The event is the same. The communication experience changes.', short: 'Ready for trusted outreach', cue: 'Rewind to the same purchase. Show how a recognizable message can carry context before a follow-up call.' },
-  rcsSent: { chapter: 'Attempt 2 · Rich message', caption: 'The illustrated phone shows purchase details in a branded message.', short: 'RCS alert shown', cue: 'If configured, this action sent a real rich-card request to an invited RCS tester. Confirm delivery on your actual handset. The iPhone view is illustrative.' },
-  noResponse: { chapter: 'Attempt 2 · No response', caption: 'No reply arrives, so the application escalates the outreach.', short: 'No response', cue: 'No response is a presenter-selected state here. Next, place the branded AI agent call. In an app, your timing and event logic would decide when to call.' },
-  brandedRinging: { chapter: 'Attempt 2 · Branded call', caption: 'A follow-up call identifies the registered business.', short: 'Branded call ringing', cue: 'Answer your real phone and say “No, I do not recognize that charge.” The spoken answer should update the bank app. Your Android 13 handset may show less branding than the illustration.' },
+  unknownMissed: { chapter: 'Attempt 1 · Missed call', caption: 'Anthony ignores the unknown call, and the charge remains unconfirmed.', short: 'Call ignored', cue: 'Anthony did not answer because he could not recognize the caller. Keep the same charge on screen and send a plain SMS next.' },
+  smsSent: { chapter: 'Attempt 2 · Plain SMS', caption: 'The text claims to be from Twilio Bank, but its sender appears as a number.', short: 'SMS alert shown', cue: 'Compare the number-only SMS header with the message body. The words “Twilio Bank” are in the text, but there is no recognizable sender profile. Anthony is unsure it is genuine.' },
+  smsIgnored: { chapter: 'Attempt 2 · Ignored SMS', caption: 'Anthony distrusts the number-only text and leaves the charge unresolved.', short: 'SMS ignored', cue: 'Anthony ignored the SMS because a plain number and a claim in the body did not give him enough confidence. Now show the branded RCS sender for this same charge.' },
+  rcsSent: { chapter: 'Attempt 3 · Branded RCS', caption: 'The rich message shows a recognizable sender and the purchase details.', short: 'RCS alert shown', cue: 'If configured, this sent an RCS request to an invited tester. Show your actual handset alongside the illustrated Android phone. Anthony is away from his phone and misses the branded alert.' },
+  noResponse: { chapter: 'Attempt 3 · RCS missed', caption: 'Anthony is away from his phone and misses the branded RCS alert, so the application follows up.', short: 'RCS alert missed', cue: 'The RCS alert was missed while Anthony was away from his phone; its sender was recognizable. This is a presenter-selected story state. Place the branded AI agent call next.' },
+  brandedRinging: { chapter: 'Attempt 4 · Branded call', caption: 'The follow-up call identifies the registered business.', short: 'Branded call ringing', cue: 'Answer your real phone and say “No, I do not recognize that charge.” The spoken answer should update the bank app. Your Android 13 handset may show less branding than the illustration.' },
   reached: { chapter: 'The outcome · Answer recorded', caption: 'Anthony’s answer is now visible in the bank app.', short: 'Answer recorded', cue: 'Point to Anthony’s answer in the bank app. The demo records his response; it does not change a real card or start a bank investigation.' },
 };
 
@@ -69,6 +72,7 @@ let deferredPresenterFocus = null;
 let lastPhoneCueKey = '';
 let pulsingPhoneCueKey = '';
 let phoneCuePulseTimer = null;
+let rcsProfileTab = null;
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (character) => ({
@@ -125,6 +129,16 @@ function brand(variant = '') {
   return `<a class="brand ${variant}" href="/bank?home=1" aria-label="Twilio Bank home"><span class="brand-bug">${bugMark()}</span><span class="brand-name">twilio<span>bank</span></span></a>`;
 }
 
+function rcsFallbackSelected(state) {
+  return state.messageMode === 'live' && state.messageChannel === 'fallback';
+}
+
+function illustratedRcsAvailable(state) {
+  return ['rcsSent', 'noResponse'].includes(state.step)
+    && state.messageChannel !== 'fallback'
+    && !['sms', 'fallback', 'smsFallback'].includes(state.messageMode);
+}
+
 function sceneFor(state) {
   const scene = SCENES[state.step] || SCENES.idle;
   if (state.step === 'reached' && ['recognized', 'unrecognized'].includes(state.chargeDecision)) {
@@ -133,19 +147,36 @@ function sceneFor(state) {
       ? { ...scene, caption: 'Anthony did not recognize the charge; it still needs fraud review.', short: 'Fraud review needed', cue: `${spoken ? 'The live voice answer updated the bank app automatically.' : 'This is a presenter-selected simulation of Anthony’s answer.'} Point to the green response marker and the separate fraud-review warning. No real bank action was taken.` }
       : { ...scene, caption: 'Anthony recognized the purchase; his answer is recorded in the demo.', short: 'Purchase recognized', cue: `${spoken ? 'The live voice answer updated the bank app automatically.' : 'This is a presenter-selected simulation of Anthony’s answer.'} Point to the recorded response. No real card action was taken.` };
   }
-  if (state.step === 'rcsSent') {
-    if (state.messageMode === 'live' && state.messageChannel === 'rcs') {
-      return { ...scene, short: 'RCS delivery confirmed', caption: 'Twilio reports delivery over RCS. The iPhone card remains an illustration.', cue: 'The refreshed Message resource reports delivery from the RCS sender. Show the actual tester handset beside this illustrated iPhone.' };
+  if (state.step === 'smsSent') {
+    if (state.smsMode === 'live' && ['failed', 'undelivered', 'canceled'].includes(String(state.smsStatus || '').toLowerCase())) {
+      return { ...scene, short: 'SMS not delivered', caption: 'Twilio reports that the SMS did not reach the phone. The number-only screen remains illustrative.', cue: 'The live SMS did not arrive. Show the request status, then continue the story using the simulated number-only screen.' };
     }
-    if (state.messageMode === 'live' && state.messageChannel === 'fallback') {
-      return { ...scene, short: 'Fallback delivery confirmed', caption: 'Twilio reports delivery from a phone-number sender. The illustrated phone now shows the text fallback.', cue: 'The refreshed Message resource reports delivery from a phone-number sender. Explain how the Messaging Service used fallback, then show the actual phone.' };
+    if (state.smsMode === 'live' && String(state.smsStatus || '').toLowerCase() === 'delivered') {
+      return { ...scene, short: 'SMS delivered', caption: 'Twilio reports SMS delivery. The illustrated phone shows how a number-only sender can appear.', cue: 'Check the real handset. The SMS body says “Twilio Bank,” but the sender is just a number. Ask whether Anthony would trust it, then mark it ignored.' };
+    }
+    return state.smsMode === 'live'
+      ? { ...scene, short: 'SMS request accepted', caption: 'Twilio accepted the SMS request; delivery has not been confirmed yet.', cue: 'Check your real handset, then refresh status if needed. The iPhone is illustrative. The bank name appears in the body, while the sender display is just a number.' }
+      : { ...scene, short: 'SMS preview shown', cue: 'This is a preview; no SMS was sent. The body claims to be from Twilio Bank, but the sender header is only a phone number. Mark it ignored next.' };
+  }
+  if (state.step === 'noResponse' && rcsFallbackSelected(state)) {
+    return { ...scene, short: 'Fallback alert missed', caption: 'The later RCS request used a number-based text fallback. Anthony was away and missed it.', cue: 'This run used SMS/MMS fallback for the later RCS request, separate from the first SMS that Anthony doubted. The application can still escalate to a branded call.' };
+  }
+  if (state.step === 'rcsSent') {
+    if (state.messageMode === 'live' && state.messageChannel === 'rcs' && String(state.messageStatus || '').toLowerCase() === 'delivered') {
+      return { ...scene, short: 'RCS delivery confirmed', caption: 'Twilio reports delivery over RCS. The Android card remains an illustration.', cue: 'The refreshed Message resource reports delivery from the RCS sender. Show the actual tester handset beside this illustrated Android phone. Anthony is away from his phone in our story.' };
+    }
+    if (state.messageMode === 'live' && state.messageChannel === 'fallback' && String(state.messageStatus || '').toLowerCase() === 'delivered') {
+      return { ...scene, short: 'RCS fallback delivered', caption: 'Twilio reports delivery from a phone-number sender. The illustrated phone shows the later RCS request’s text fallback.', cue: 'The refreshed Message resource reports delivery from a phone-number sender. This fallback belongs to the later RCS request; it is separate from the first SMS Anthony ignored.' };
     }
     if (state.messageMode === 'live' && ['failed', 'undelivered', 'canceled'].includes(String(state.messageStatus || '').toLowerCase())) {
-      return { ...scene, short: 'Message not delivered', caption: 'Twilio reports that the live message was not delivered. The iPhone card remains an example.', cue: 'The live message did not reach the phone. Use the status and Console logs to explain what happened, then continue the fictional story with the simulated card if useful.' };
+      return { ...scene, short: 'Message not delivered', caption: 'Twilio reports that the live message was not delivered. The Android card remains an example.', cue: 'The live message did not reach the phone. Use the status and Console logs to explain what happened, then continue the fictional story with the simulated card if useful.' };
+    }
+    if (rcsFallbackSelected(state)) {
+      return { ...scene, short: 'RCS fallback selected', caption: 'The later RCS request used a number-based text sender; delivery is not confirmed yet.', cue: 'Check the actual handset and delivery status. This SMS/MMS fallback is separate from the first SMS Anthony ignored. The illustrated phone shows a plain-number text.' };
     }
     return state.messageMode === 'live'
-      ? { ...scene, short: 'Message request accepted', caption: 'Twilio accepted the message request. Its delivery channel is not confirmed yet.', cue: 'Twilio accepted the rich-card request to the invited tester. Confirm delivery on your actual handset, then refresh status. The iPhone view is illustrative.' }
-      : { ...scene, short: 'RCS preview shown', cue: 'This is a preview. No message was sent. The iPhone view illustrates a rich RCS card for the same purchase.' };
+      ? { ...scene, short: 'RCS request accepted', caption: 'Twilio accepted the rich-message request. Delivery has not been confirmed yet.', cue: 'Check the tester handset and refresh status. The RCS sender is recognizable in the illustrated phone. Anthony is away from his phone in our story.' }
+      : { ...scene, short: 'RCS preview shown', cue: 'This is a preview. No message was sent. The Android view illustrates a recognizable RCS sender for the same charge. Anthony is away from his phone.' };
   }
   if (state.step === 'brandedRinging') {
     if (state.callMode === 'live' && ['failed', 'busy', 'no-answer', 'canceled'].includes(String(state.callStatus || '').toLowerCase())) {
@@ -181,23 +212,38 @@ function presenterSceneFor(state) {
       cue: 'Use the sections that fit your audience: identity setup, the live voice diagram, example requests, and optional extensions. Return to Architecture for the summary.',
     };
   }
-  return sceneFor(state);
+  const scene = sceneFor(state);
+  if (state.step === 'rcsSent' && illustratedRcsAvailable(state)) {
+    return {
+      ...scene,
+      cue: `${scene.cue} Click the Twilio Bank sender at the top of the audience phone to show its business profile, then use Back to return to the chat.`,
+    };
+  }
+  return scene;
 }
 
 function phoneCueFor(state, config) {
-  if (presenterAuthenticated && state.step === 'rewound' && config.rcsReady) {
+  if (presenterAuthenticated && state.step === 'unknownMissed' && config.smsReady) {
+    return { key: 'ready:sms', label: 'Real phone step', detail: pendingAction === 'sendSms' ? 'Sending the number-only SMS to your test phone…' : 'Click Send live SMS to show a number-only text on your test phone.' };
+  }
+  if (presenterAuthenticated && state.step === 'smsIgnored' && config.rcsReady) {
     return { key: 'ready:rcs', label: 'Real phone step', detail: pendingAction === 'sendRcs' ? 'Sending the fraud alert to your test phone…' : 'Click Send live RCS to send the fraud alert to your test phone.' };
   }
   if (presenterAuthenticated && state.step === 'noResponse' && config.voiceReady) {
     return { key: 'ready:call', label: 'Real phone step', detail: pendingAction === 'placeCall' ? 'Placing the AI agent call to your test phone…' : 'Click Place AI agent call, then answer your phone and speak with the agent.' };
   }
+  if (state.step === 'smsSent' && state.smsMode === 'live') {
+    if (['failed', 'undelivered', 'canceled'].includes(String(state.smsStatus || '').toLowerCase())) return null;
+    return { key: `sms:${state.smsSid || 'pending'}`, label: 'Check your phone now', detail: String(state.smsStatus || '').toLowerCase() === 'delivered' ? 'Look for the SMS from a phone number. Twilio reports delivery.' : 'Look for the SMS from a phone number. Twilio accepted the request; delivery is not confirmed yet.' };
+  }
   if (state.step === 'rcsSent' && state.messageMode === 'live') {
     if (['failed', 'undelivered', 'canceled'].includes(String(state.messageStatus || '').toLowerCase())) return null;
+    const delivered = String(state.messageStatus || '').toLowerCase() === 'delivered';
     const detail = state.messageChannel === 'fallback'
-      ? 'Look for the SMS fallback on your test handset. Twilio reports delivery from a phone-number sender.'
+      ? `Look for the later RCS request’s SMS fallback. ${delivered ? 'Twilio reports delivery from a phone-number sender.' : 'Delivery is not confirmed yet.'}`
       : state.messageChannel === 'rcs'
-        ? 'Look for the fraud alert on your test handset. Twilio reports RCS delivery.'
-        : 'Look for the fraud alert on your test handset. Twilio accepted the request; delivery is not confirmed yet.';
+        ? `Look for the branded alert on your test handset. ${delivered ? 'Twilio reports RCS delivery.' : 'Delivery is not confirmed yet.'}`
+        : 'Look for the branded alert on your test handset. Twilio accepted the request; delivery is not confirmed yet.';
     return { key: `message:${state.messageSid || 'pending'}`, label: 'Check your phone now', detail };
   }
   if (state.step === 'brandedRinging' && state.callMode === 'live') {
@@ -252,6 +298,7 @@ function restorePresenterFocus(intent) {
 
 function render() {
   const path = window.location.pathname;
+  if (path !== '/bank') rcsProfileTab = null;
   if (path === '/presenter' && presenterAuthenticated !== true) {
     document.title = 'Presenter sign in · Twilio Bank';
     if (presenterAuthenticated === null) {
@@ -287,7 +334,12 @@ function render() {
     });
   } else {
     document.title = 'Customer account · Twilio Bank';
-    root.innerHTML = renderBank(state);
+    const previousProfileScroll = root.querySelector('.phone-rcs-profile-scroll');
+    const profileScrollTop = previousProfileScroll?.dataset.profileTab === rcsProfileTab
+      ? previousProfileScroll.scrollTop : 0;
+    root.innerHTML = renderBank(state, snapshot.config);
+    const currentProfileScroll = root.querySelector('.phone-rcs-profile-scroll');
+    if (currentProfileScroll) currentProfileScroll.scrollTop = profileScrollTop;
   }
 }
 
@@ -317,11 +369,11 @@ function syncAudienceRoute() {
   if (window.location.pathname !== wanted) window.history.replaceState(null, '', wanted);
 }
 
-function renderBank(state) {
+function renderBank(state, config) {
   const scene = sceneFor(state);
   const flagged = state.step !== 'idle';
-  const contacted = ['unknownRinging', 'unknownMissed', 'rcsSent', 'noResponse', 'brandedRinging', 'reached'].includes(state.step);
-  const phone = renderPhone(state);
+  const contacted = ['unknownRinging', 'unknownMissed', 'smsSent', 'smsIgnored', 'rcsSent', 'noResponse', 'brandedRinging', 'reached'].includes(state.step);
+  const phone = renderPhone(state, config, { rcsProfileTab });
   const transactionStatus = state.step === 'reached' && state.chargeDecision === 'unrecognized' ? 'Fraud review needed'
     : state.step === 'reached' && state.chargeDecision === 'recognized' ? 'Answer recorded' : 'Review needed';
 
@@ -413,6 +465,18 @@ Content-Type: application/json
     }
   }
 }`;
+  const smsRequest = `import twilio from "twilio";
+const client = twilio(
+  process.env.TWILIO_ACCOUNT_SID,
+  process.env.TWILIO_AUTH_TOKEN
+);
+await client.messages.create({
+  to: "+15551234567",
+  messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID,
+  from: process.env.TWILIO_SMS_FROM,
+  body: "Twilio Bank: Did you make a $9,800.00 charge at Midlife Crisis Motors? Open your banking app to review it.",
+  statusCallback: "https://app.example/webhooks/message-status"
+});`;
   const messageRequest = `import twilio from "twilio";
 const client = twilio(
   process.env.TWILIO_ACCOUNT_SID,
@@ -597,11 +661,14 @@ ws.send(JSON.stringify({
           <div class="appendix-requests-heading"><div class="appendix-section-heading"><span>04 / Example requests</span><h2>What the application sends</h2></div><p>Underlined lines show the key Twilio parameters. Replace example SIDs, numbers, and URLs before using these payloads.</p></div>
           <div class="appendix-request-grid">
             <details class="appendix-request">
-              <summary><span>RCS template and send request</span><small>View code ${icon('chevron', 14)}</small></summary>
+              <summary><span>SMS and RCS send requests</span><small>View code ${icon('chevron', 14)}</small></summary>
               <div class="appendix-request-body">
+                <h4>Send the first SMS <small>Choose the phone-number sender</small></h4><pre><code>${highlightCode(smsRequest, ['  to:', '  messagingServiceSid:', '  from:', '  body:'])}</code></pre>
+                <p><strong>Live webinar test.</strong> When configured, this sends the fictional alert to the presenter's fixed test phone. The verified toll-free number currently lists marketing; update its registration before production fraud-alert traffic. <a href="${SOURCES.tollFreeUseCases}" target="_blank" rel="noopener noreferrer">Twilio toll-free verification</a></p>
+                <p>This deliberate SMS send specifies both the Messaging Service and its phone-number sender. It is separate from SMS/MMS fallback on a later RCS request. <a href="${SOURCES.messagingServices}" target="_blank" rel="noopener noreferrer">Messaging Service sender selection</a></p>
                 <h4>Create the Content Template once <small>RCS card and text fallback</small></h4><pre><code>${highlightCode(templatePayload, ['"twilio/card"', '"title": "Action needed:', '"body": "Open your account', '"media":', '"actions":', '"twilio/text"', '"body": "Action needed for'])}</code></pre>
                 <h4>Send it for each event <small>Recipient, sender, template, variables</small></h4><pre><code>${highlightCode(messageRequest, ['  to:', '  messagingServiceSid:', '  contentSid:', '  contentVariables:'])}</code></pre>
-                <p>The RCS card and SMS bodies live in the HX template. A ContentSid send does not also include a Body field. <a href="${SOURCES.card}" target="_blank" rel="noopener noreferrer">Twilio card</a> · <a href="${SOURCES.contentApi}" target="_blank" rel="noopener noreferrer">Content API</a></p>
+                <p>The later RCS request uses an HX template with card and text variants. A ContentSid send does not also include a Body field. <a href="${SOURCES.card}" target="_blank" rel="noopener noreferrer">Twilio card</a> · <a href="${SOURCES.contentApi}" target="_blank" rel="noopener noreferrer">Content API</a> · <a href="${SOURCES.rcsSend}" target="_blank" rel="noopener noreferrer">RCS fallback</a></p>
               </div>
             </details>
             <details class="appendix-request">
@@ -647,9 +714,10 @@ function renderNextActions(state, config) {
     case 'idle': return presenterButton('flagPurchase', 'Flag purchase', { primary: true });
     case 'flagged': return presenterButton('showUnknownCall', 'Show unknown call', { primary: true });
     case 'unknownRinging': return presenterButton('ignoreUnknownCall', 'Anthony ignores it', { primary: true });
-    case 'unknownMissed': return presenterButton('rewind', 'Rewind', { primary: true });
-    case 'rewound': return `${presenterButton('sendRcs', 'Send live RCS', { primary: config.rcsReady, disabled: !config.rcsReady, live: true, unavailable: !config.rcsReady && 'Configure RCS to enable' })}${presenterButton('previewRcs', 'Show RCS preview', { primary: !config.rcsReady })}`;
-    case 'rcsSent': return presenterButton('markNoResponse', 'Mark no response', { primary: true });
+    case 'unknownMissed': return `${presenterButton('sendSms', 'Send live SMS', { primary: config.smsReady, disabled: !config.smsReady, live: true, unavailable: !config.smsReady && 'Configure SMS to enable' })}${presenterButton('previewSms', 'Show SMS preview', { primary: !config.smsReady, simulated: true })}`;
+    case 'smsSent': return presenterButton('ignoreSms', 'Anthony ignores SMS', { primary: true, simulated: true });
+    case 'smsIgnored': return `${presenterButton('sendRcs', 'Send live RCS', { primary: config.rcsReady, disabled: !config.rcsReady, live: true, unavailable: !config.rcsReady && 'Configure RCS to enable' })}${presenterButton('previewRcs', 'Show RCS preview', { primary: !config.rcsReady, simulated: true })}`;
+    case 'rcsSent': return presenterButton('markNoResponse', rcsFallbackSelected(state) ? 'Anthony misses fallback text' : 'Anthony misses RCS', { primary: true, simulated: true });
     case 'noResponse': return `${presenterButton('placeCall', 'Place AI agent call', { primary: config.voiceReady, disabled: !config.voiceReady, live: true, unavailable: !config.voiceReady && 'Configure AI call to enable' })}${presenterButton('previewBrandedCall', 'Show call preview', { primary: !config.voiceReady })}`;
     case 'brandedRinging': return `${state.callMode === 'live' ? '<span class="voice-awaiting" role="status">Waiting for the spoken answer. Manual choices are backup.</span>' : '<span class="voice-awaiting" role="status">Choose a simulated answer to finish the preview.</span>'}${presenterButton('confirmPurchase', 'Yes, I made it', { simulated: true })}${presenterButton('reportUnrecognized', 'No, not mine', { simulated: true })}`;
     case 'reached': return state.audienceView === 'bank'
@@ -664,19 +732,22 @@ function renderNextActions(state, config) {
 function renderPresenter(state, config, phoneCue) {
   const scene = presenterSceneFor(state);
   const step = state.step;
+  const smsReady = Boolean(config.smsReady);
   const rcsReady = Boolean(config.rcsReady);
   const voiceReady = Boolean(config.voiceReady);
-  const canRcs = step === 'rewound';
+  const canSms = step === 'unknownMissed';
+  const canRcs = step === 'smsIgnored';
   const canCall = step === 'noResponse';
   const currentStepIndex = Object.keys(SCENES).indexOf(step);
-  const rcsFutureStep = rcsReady && currentStepIndex < 4 ? '05/09' : '';
-  const callFutureStep = voiceReady && currentStepIndex < 6 ? '07/09' : '';
+  const smsFutureStep = smsReady && currentStepIndex < 3 ? '04/10' : '';
+  const rcsFutureStep = rcsReady && currentStepIndex < 5 ? '06/10' : '';
+  const callFutureStep = voiceReady && currentStepIndex < 7 ? '08/10' : '';
   const canCompareCall = step === 'brandedRinging' || step === 'reached';
   const channelLabel = {
     simulated: 'Preview only',
     pending: 'Pending confirmation',
     rcs: 'RCS confirmed',
-    fallback: 'Number-based fallback confirmed',
+    fallback: 'RCS request used SMS/MMS fallback',
     unknown: 'Unverified',
   }[state.messageChannel] || '—';
   return `<div class="presenter-shell">
@@ -685,24 +756,29 @@ function renderPresenter(state, config, phoneCue) {
       <div class="presenter-grid"><div class="presenter-controls">
         ${actionError ? `<div class="error-banner" role="alert">${icon('alert', 18)}<span>${escapeHtml(actionError)}</span><button type="button" data-dismiss-error aria-label="Dismiss error">×</button></div>` : ''}
         ${transportError ? `<div class="connection-banner" role="status">${icon('refresh', 17)} ${escapeHtml(transportError)}</div>` : ''}
-        <section class="current-scene${phoneCue ? ' current-scene-phone' : ''}${phoneCue?.key === pulsingPhoneCueKey ? ' current-scene-attention' : ''}"><div class="current-scene-copy"><span class="current-scene-label">${state.audienceView === 'bank' ? 'On screen now' : 'Presenter-selected page'}</span><h2>${escapeHtml(scene.short)}</h2><p>${escapeHtml(scene.caption)}</p>${phoneCue ? `<div class="current-scene-phone-cue" role="status"><strong>${icon('phone', 16)} ${escapeHtml(phoneCue.label)}</strong><span>${escapeHtml(phoneCue.detail)}</span></div>` : ''}</div><div class="current-scene-side"><span class="step-index">${String(currentStepIndex + 1).padStart(2, '0')} / 09</span><div class="current-actions">${renderNextActions(state, config)}</div><button type="button" class="restart-story-button" data-action="reset" ${step === 'idle' && !state.events.length || pendingAction ? 'disabled' : ''}>${icon('refresh', 14)} ${escapeHtml(pendingAction === 'reset' ? 'Restarting…' : 'Restart story')}</button></div></section>
-        <section class="control-group"><div class="group-heading"><span>01</span><div><h2>Set the scene</h2><p>The same charge drives both attempts.</p></div></div><div class="action-stack">${presenterButton('flagPurchase', 'Flag the $9,800.00 charge', { disabled: step !== 'idle', primary: step === 'idle', simulated: true })}</div></section>
+        <section class="current-scene${phoneCue ? ' current-scene-phone' : ''}${phoneCue?.key === pulsingPhoneCueKey ? ' current-scene-attention' : ''}"><div class="current-scene-copy"><span class="current-scene-label">${state.audienceView === 'bank' ? 'On screen now' : 'Presenter-selected page'}</span><h2>${escapeHtml(scene.short)}</h2><p>${escapeHtml(scene.caption)}</p>${phoneCue ? `<div class="current-scene-phone-cue" role="status"><strong>${icon('phone', 16)} ${escapeHtml(phoneCue.label)}</strong><span>${escapeHtml(phoneCue.detail)}</span></div>` : ''}</div><div class="current-scene-side"><span class="step-index">${String(currentStepIndex + 1).padStart(2, '0')} / 10</span><div class="current-actions">${renderNextActions(state, config)}</div><button type="button" class="restart-story-button" data-action="reset" ${step === 'idle' && !state.events.length || pendingAction ? 'disabled' : ''}>${icon('refresh', 14)} ${escapeHtml(pendingAction === 'reset' ? 'Restarting…' : 'Restart story')}</button></div></section>
+        <section class="control-group"><div class="group-heading"><span>01</span><div><h2>Set the scene</h2><p>The bank flags one charge. Anthony has not opened the app.</p></div></div><div class="action-stack">${presenterButton('flagPurchase', 'Flag the $9,800.00 charge', { disabled: step !== 'idle', primary: step === 'idle', simulated: true })}</div></section>
         <section class="control-group"><div class="group-heading"><span>02</span><div><h2>The anonymous call</h2><p>Show what Anthony sees without caller identity.</p></div></div><div class="action-stack two-up">${presenterButton('showUnknownCall', 'Show unknown call', { disabled: step !== 'flagged', primary: step === 'flagged', simulated: true })}${presenterButton('ignoreUnknownCall', 'Anthony ignores it', { disabled: step !== 'unknownRinging', primary: step === 'unknownRinging', simulated: true })}</div></section>
-        <section class="control-group"><div class="group-heading"><span>03</span><div><h2>Replay with context</h2><p>Send the rich alert, then escalate if there is no reply.</p></div></div><div class="action-stack">
-          ${presenterButton('rewind', 'Rewind to the same charge', { disabled: step !== 'unknownMissed', primary: step === 'unknownMissed', simulated: true })}
+        <section class="control-group"><div class="group-heading"><span>03</span><div><h2>The number-only SMS</h2><p>The body claims Twilio Bank, but the sender header shows a plain number.</p></div></div><div class="action-stack">
+          <div class="action-stack two-up">${presenterButton('sendSms', 'Send live SMS', { disabled: !canSms || !smsReady, primary: canSms && smsReady, live: true, futureStep: smsFutureStep, unavailable: !smsReady && 'Configure SMS to enable' })}${presenterButton('previewSms', 'Show SMS preview', { disabled: !canSms, primary: canSms && !smsReady, simulated: true })}</div>
+          ${presenterButton('ignoreSms', 'Anthony ignores the SMS', { disabled: step !== 'smsSent', primary: step === 'smsSent', simulated: true })}
+        </div></section>
+        <section class="control-group"><div class="group-heading"><span>04</span><div><h2>The branded RCS alert</h2><p>The sender is recognizable; Anthony is away from his phone and misses it.</p></div></div><div class="action-stack">
           <div class="action-stack two-up">${presenterButton('sendRcs', 'Send live rich RCS', { disabled: !canRcs || !rcsReady, primary: canRcs && rcsReady, live: true, futureStep: rcsFutureStep, unavailable: !rcsReady && 'Configure RCS to enable' })}${presenterButton('previewRcs', 'Show RCS preview', { disabled: !canRcs, primary: canRcs && !rcsReady, simulated: true })}</div>
-          ${presenterButton('markNoResponse', 'Mark no response', { disabled: step !== 'rcsSent', primary: step === 'rcsSent', simulated: true })}
+          ${presenterButton('markNoResponse', rcsFallbackSelected(state) ? 'Anthony misses fallback text' : 'Anthony misses RCS', { disabled: step !== 'rcsSent', primary: step === 'rcsSent', simulated: true })}
+        </div></section>
+        <section class="control-group"><div class="group-heading"><span>05</span><div><h2>The branded call</h2><p>Anthony answers and verifies the charge with the voice agent.</p></div></div><div class="action-stack">
           <div class="action-stack two-up">${presenterButton('placeCall', 'Place live AI agent call', { disabled: !canCall || !voiceReady, primary: canCall && voiceReady, live: true, futureStep: callFutureStep, unavailable: !voiceReady && 'Configure AI call to enable' })}${presenterButton('previewBrandedCall', 'Show call preview', { disabled: !canCall, primary: canCall && !voiceReady, simulated: true })}</div>
           ${canCompareCall ? `<div class="call-preview-options"><div class="call-preview-copy"><strong>Compare supported displays</strong><small>Android 14+ is the default call example. “Card security alert” is illustrative; the reason in your approved bundle is unverified.</small></div><div class="action-stack two-up">${presenterButton('showIphoneCallExample', 'iPhone · name + logo', { disabled: state.callPreviewDevice === 'iphone', simulated: true })}${presenterButton('showAndroidReasonExample', 'Android 14+ · example reason', { disabled: state.callPreviewDevice === 'android', simulated: true })}</div></div>` : ''}
           <div class="decision-manual"><p>${step === 'brandedRinging' && state.callMode === 'live' ? 'The live call should set the answer automatically. Use these only if the voice answer is missed.' : 'Manual choices show a simulated answer for the story.'}</p><div class="action-stack two-up">${presenterButton('confirmPurchase', 'Yes, I made it', { disabled: step !== 'brandedRinging', simulated: true })}${presenterButton('reportUnrecognized', 'No, not mine', { disabled: step !== 'brandedRinging', simulated: true })}</div></div>
         </div></section>
-        <section class="control-group control-group-tools"><div class="group-heading"><span>04</span><div><h2>Explain the build</h2><p>Show the trust overview, then the technical notes if useful.</p></div></div><div class="action-stack two-up">${presenterButton('showArchitecture', 'Show architecture', { primary: step === 'reached' && state.audienceView === 'bank' })}${presenterButton('showTechnicalNotes', 'Show technical notes', { primary: step === 'reached' && state.audienceView === 'architecture' })}</div><div class="action-stack">${presenterButton('showBank', 'Show bank app')}${presenterButton('refreshStatuses', 'Refresh live statuses', { disabled: !state.messageSid && !state.callSid })}</div></section>
+        <section class="control-group control-group-tools"><div class="group-heading"><span>06</span><div><h2>Explain the build</h2><p>Show the trust overview, then the technical notes if useful.</p></div></div><div class="action-stack two-up">${presenterButton('showArchitecture', 'Show architecture', { primary: step === 'reached' && state.audienceView === 'bank' })}${presenterButton('showTechnicalNotes', 'Show technical notes', { primary: step === 'reached' && state.audienceView === 'architecture' })}</div><div class="action-stack">${presenterButton('showBank', 'Show bank app')}${presenterButton('refreshStatuses', 'Refresh live statuses', { disabled: !state.smsSid && !state.messageSid && !state.callSid })}</div></section>
       </div><aside class="presenter-sidebar">
         <section class="presenter-panel"><div class="panel-title"><h2>What to say now</h2><span>${icon('message', 18)}</span></div><p class="cue-text">${escapeHtml(scene.cue)}</p></section>
-        <section class="presenter-panel"><div class="panel-title"><h2>Live setup</h2><span>${icon('shield', 18)}</span></div><div class="readiness-row"><span class="readiness-indicator ${rcsReady ? 'ready' : ''}"></span><div><strong>Rich RCS test</strong><small>${rcsReady ? `Configured for ${escapeHtml(config.recipientMasked || 'demo recipient')} · confirm tester invitation` : 'Configure RCS credentials, tester, and Content SID on the server'}</small></div></div><div class="readiness-row"><span class="readiness-indicator ${voiceReady ? 'ready' : ''}"></span><div><strong>Branded AI agent call</strong><small>${voiceReady ? `Configured ${escapeHtml(config.callerMasked || 'caller')} → ${escapeHtml(config.recipientMasked || 'recipient')} · Relay + OpenAI` : 'Set the approved number, recipient, OPENAI_API_KEY, and public relay URL (wss://) on the server'}</small></div></div><p class="panel-hint">Configured means values are present and well formed; it does not verify Conversation Relay onboarding, public reachability, or handset display. See <code>PRESENTER.md</code> for setup.</p></section>
-        <section class="presenter-panel"><div class="panel-title"><h2>Live status and answer</h2><span>${icon('activity', 18)}</span></div><dl class="result-list"><div><dt>Message SID</dt><dd>${escapeHtml(state.messageSid || '—')}</dd></div><div><dt>Message status</dt><dd>${escapeHtml(state.messageStatus || '—')}</dd></div><div><dt>Delivery channel</dt><dd>${escapeHtml(channelLabel)}</dd></div><div><dt>Call SID</dt><dd>${escapeHtml(state.callSid || '—')}</dd></div><div><dt>Call status</dt><dd>${escapeHtml(state.callStatus || '—')}</dd></div><div><dt>Anthony’s answer</dt><dd>${state.chargeDecision === 'recognized' ? 'Recognized purchase' : state.chargeDecision === 'unrecognized' ? 'Did not recognize' : '—'}</dd></div><div><dt>Answer source</dt><dd>${state.decisionSource === 'voice' ? 'Live voice' : state.decisionSource === 'presenter' ? 'Presenter simulation' : '—'}</dd></div></dl><p class="panel-hint">“Accepted” confirms an API request, not delivery. A completed call does not establish a purchase decision.</p></section>
+        <section class="presenter-panel"><div class="panel-title"><h2>Live setup</h2><span>${icon('shield', 18)}</span></div><div class="readiness-row"><span class="readiness-indicator ${smsReady ? 'ready' : ''}"></span><div><strong>Number-only SMS</strong><small>${smsReady ? `Configured from ${escapeHtml(config.smsSenderMasked || 'SMS sender')} to ${escapeHtml(config.recipientMasked || 'demo recipient')}` : 'Configure an SMS sender in the Messaging Service and set TWILIO_SMS_FROM'}</small></div></div><div class="readiness-row"><span class="readiness-indicator ${rcsReady ? 'ready' : ''}"></span><div><strong>Rich RCS test</strong><small>${rcsReady ? `Configured for ${escapeHtml(config.recipientMasked || 'demo recipient')} · confirm tester invitation` : 'Configure RCS credentials, tester, and Content SID on the server'}</small></div></div><div class="readiness-row"><span class="readiness-indicator ${voiceReady ? 'ready' : ''}"></span><div><strong>Branded AI agent call</strong><small>${voiceReady ? `Configured ${escapeHtml(config.callerMasked || 'caller')} → ${escapeHtml(config.recipientMasked || 'recipient')} · Relay + OpenAI` : 'Set the approved number, recipient, OPENAI_API_KEY, and public relay URL (wss://) on the server'}</small></div></div><p class="panel-hint">Configured means values are present and well formed; it does not verify delivery, ConversationRelay onboarding, public reachability, or handset display. See <code>PRESENTER.md</code> for setup.</p></section>
+        <section class="presenter-panel"><div class="panel-title"><h2>Live status and answer</h2><span>${icon('activity', 18)}</span></div><dl class="result-list"><div><dt>SMS SID</dt><dd>${escapeHtml(state.smsSid || '—')}</dd></div><div><dt>SMS status</dt><dd>${escapeHtml(state.smsStatus || '—')}</dd></div><div><dt>RCS SID</dt><dd>${escapeHtml(state.messageSid || '—')}</dd></div><div><dt>RCS request status</dt><dd>${escapeHtml(state.messageStatus || '—')}</dd></div><div><dt>RCS delivery channel</dt><dd>${escapeHtml(channelLabel)}</dd></div><div><dt>Call SID</dt><dd>${escapeHtml(state.callSid || '—')}</dd></div><div><dt>Call status</dt><dd>${escapeHtml(state.callStatus || '—')}</dd></div><div><dt>Anthony’s answer</dt><dd>${state.chargeDecision === 'recognized' ? 'Recognized purchase' : state.chargeDecision === 'unrecognized' ? 'Did not recognize' : '—'}</dd></div><div><dt>Answer source</dt><dd>${state.decisionSource === 'voice' ? 'Live voice' : state.decisionSource === 'presenter' ? 'Presenter simulation' : '—'}</dd></div></dl><p class="panel-hint">“Accepted” confirms an API request, not delivery. A completed call does not establish a purchase decision.</p></section>
         <section class="presenter-panel presenter-event-panel"><div class="panel-title"><h2>Recent events</h2><span class="event-count">${state.events.length}</span></div>${renderEventLog(state.events, 5)}</section>
-        <details class="presenter-notes"><summary>Device and channel notes</summary><p>Your Samsung Android 13 is outside Twilio’s documented Samsung Android 14+ support for US Enhanced Branded Calling. The iPhone and Android 14+ views are simulations. The approved caller name is “Twilio”; “Card security alert” illustrates a possible call reason and is not confirmed as the reason in your bundle. Twilio lists call-reason display on supported Android devices, while its iPhone entries list name and logo only.</p><p>The call reason comes from your approved Branded Calling registration, not the TwiML. Conversation Relay transcribes caller speech and voices agent replies with ElevenLabs; the application server gets responses from OpenAI. The demo can capture a spoken purchase decision; manual choices are labeled simulations.</p><p>Before RCS approval, send only to a tester who accepted the sender invitation. The SMS branch is illustrated, not sent as part of this rehearsal.</p><div><a href="${SOURCES.branded}" target="_blank" rel="noopener noreferrer">Calling guide ${icon('external', 13)}</a><a href="${SOURCES.relay}" target="_blank" rel="noopener noreferrer">Conversation Relay ${icon('external', 13)}</a><a href="${SOURCES.rcsTutorial}" target="_blank" rel="noopener noreferrer">RCS tester tutorial ${icon('external', 13)}</a></div></details>
+        <details class="presenter-notes"><summary>Device and channel notes</summary><p>Your Samsung Android 13 is outside Twilio’s documented Samsung Android 14+ support for US Enhanced Branded Calling. The iPhone and Android 14+ views are simulations. The approved caller name is “Twilio”; “Card security alert” illustrates a possible call reason and is not confirmed as the reason in your bundle. Twilio lists call-reason display on supported Android devices, while its iPhone entries list name and logo only.</p><p>The call reason comes from your approved Branded Calling registration, not the TwiML. ConversationRelay transcribes caller speech and voices agent replies with ElevenLabs; the application server gets responses from OpenAI. The demo can capture a spoken purchase decision; manual choices are labeled simulations.</p><p>The first SMS is a deliberate send from a phone-number sender. It is separate from SMS/MMS fallback if the later RCS request cannot use RCS. Before RCS approval, send only to a tester who accepted the sender invitation.</p><div><a href="${SOURCES.messagingServices}" target="_blank" rel="noopener noreferrer">Messaging Services ${icon('external', 13)}</a><a href="${SOURCES.branded}" target="_blank" rel="noopener noreferrer">Calling guide ${icon('external', 13)}</a><a href="${SOURCES.relay}" target="_blank" rel="noopener noreferrer">ConversationRelay ${icon('external', 13)}</a><a href="${SOURCES.rcsTutorial}" target="_blank" rel="noopener noreferrer">RCS tester tutorial ${icon('external', 13)}</a></div></details>
       </aside></div>
     </main>
   </div>`;
@@ -710,6 +786,10 @@ function renderPresenter(state, config, phoneCue) {
 
 function applySnapshot(next) {
   if (!next || !next.state || !next.config) return;
+  if (!illustratedRcsAvailable(next.state)
+    || next.state.audienceView !== 'bank'
+    || snapshot?.state.step !== next.state.step
+    || snapshot?.state.audienceViewRevision !== next.state.audienceViewRevision) rcsProfileTab = null;
   if (snapshot && (snapshot.state.audienceView !== next.state.audienceView
     || snapshot.state.audienceViewRevision !== next.state.audienceViewRevision)) audiencePathOverride = null;
   snapshot = next;
@@ -813,6 +893,27 @@ root.addEventListener('submit', (event) => {
 });
 
 root.addEventListener('click', (event) => {
+  if (!isPresenter && snapshot && illustratedRcsAvailable(snapshot.state)) {
+    if (event.target.closest('[data-rcs-profile-open]')) {
+      rcsProfileTab = 'info';
+      render();
+      root.querySelector('[data-rcs-profile-back]')?.focus({ preventScroll: true });
+      return;
+    }
+    if (event.target.closest('[data-rcs-profile-back]') && rcsProfileTab) {
+      rcsProfileTab = null;
+      render();
+      root.querySelector('[data-rcs-profile-open]')?.focus({ preventScroll: true });
+      return;
+    }
+    const profileTab = event.target.closest('[data-rcs-profile-tab]')?.dataset.rcsProfileTab;
+    if (rcsProfileTab && ['info', 'options'].includes(profileTab)) {
+      rcsProfileTab = profileTab;
+      render();
+      root.querySelector(`[data-rcs-profile-tab="${profileTab}"]`)?.focus({ preventScroll: true });
+      return;
+    }
+  }
   const action = event.target.closest('[data-action]');
   if (action && !action.disabled) {
     if (window.location.pathname === '/presenter') deferredPresenterFocus = { type: 'action', action: action.dataset.action, quick: Boolean(action.closest('.current-actions')) };
@@ -829,6 +930,13 @@ root.addEventListener('click', (event) => {
       if (button) { button.outerHTML = themeButton(); root.querySelector('[data-theme-toggle]')?.focus(); }
     } else render();
   }
+});
+
+window.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape' || !rcsProfileTab || window.location.pathname !== '/bank') return;
+  rcsProfileTab = null;
+  render();
+  root.querySelector('[data-rcs-profile-open]')?.focus({ preventScroll: true });
 });
 
 window.addEventListener('storage', (event) => {

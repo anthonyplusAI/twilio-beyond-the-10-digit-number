@@ -91,11 +91,12 @@ After the workflow files are on `main`, run `gh workflow run deploy.yml --repo "
 
 ## Live demo settings
 
-The simulated story needs no live Twilio or OpenAI credentials. For real RCS and AI calls, set these values directly on the Container App; the deploy workflow preserves them. Set only the features you will use. `TWILIO_CONVERSATION_RELAY_URL` is normally omitted in Azure because it is derived from `PUBLIC_BASE_URL`; the resulting URL is `wss://<app-fqdn>/voice-relay`. `TWILIO_RCS_MEDIA_URL` is used only by the local template-creation helper, not by the deployed server. [Twilio RCS test onboarding](https://www.twilio.com/docs/rcs/onboarding) · [ConversationRelay URL](https://www.twilio.com/docs/voice/conversationrelay/onboarding)
+The simulated story needs no live Twilio or OpenAI credentials. For real SMS, RCS, and AI calls, set these values directly on the Container App; the deploy workflow preserves them. Set only the features you will use. `TWILIO_CONVERSATION_RELAY_URL` is normally omitted in Azure because it is derived from `PUBLIC_BASE_URL`; the resulting URL is `wss://<app-fqdn>/voice-relay`. `TWILIO_RCS_MEDIA_URL` is used only by the local template-creation helper, not by the deployed server. [Twilio Messaging Services](https://www.twilio.com/docs/messaging/services) · [RCS test onboarding](https://www.twilio.com/docs/rcs/onboarding) · [ConversationRelay URL](https://www.twilio.com/docs/voice/conversationrelay/onboarding)
 
 | Feature | Container App environment variables |
 | --- | --- |
 | Shared live credentials | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` (secret), `DEMO_TO_NUMBER` (secret) |
+| Real first SMS | `TWILIO_MESSAGING_SERVICE_SID`, `TWILIO_SMS_FROM` |
 | Real RCS | `TWILIO_MESSAGING_SERVICE_SID`, `TWILIO_RCS_CONTENT_SID` |
 | Real branded AI call | `TWILIO_VOICE_FROM`, `OPENAI_API_KEY` (secret) |
 | Optional call tuning | `TWILIO_ELEVENLABS_VOICE_ID`, `OPENAI_MODEL` |
@@ -118,6 +119,14 @@ printf 'Messaging Service SID (MG...): '; IFS= read -r BANK_MESSAGING_SERVICE_SI
 printf 'RCS Content SID (HX...): '; IFS= read -r BANK_RCS_CONTENT_SID
 az containerapp update --name "$AZ_CONTAINER_APP" --resource-group "$AZ_RESOURCE_GROUP" --set-env-vars "TWILIO_MESSAGING_SERVICE_SID=$BANK_MESSAGING_SERVICE_SID" "TWILIO_RCS_CONTENT_SID=$BANK_RCS_CONTENT_SID" --output none
 unset BANK_MESSAGING_SERVICE_SID BANK_RCS_CONTENT_SID
+```
+
+For the live webinar self-test, set `TWILIO_SMS_FROM` to the verified toll-free number and add it to this Messaging Service's Sender Pool. The app sends only to the fixed `DEMO_TO_NUMBER` and uses both `MessagingServiceSid` and `From` to select the phone-number sender instead of the RCS sender. This first SMS is separate from RCS-to-SMS fallback. The toll-free registration currently lists marketing; update the use case before production fraud-alert traffic. Twilio's guide says changing an approved messaging use case requires deleting and resubmitting verification. [Sender selection](https://www.twilio.com/docs/messaging/services) · [Toll-free verification](https://www.twilio.com/docs/messaging/compliance/toll-free/console-onboarding)
+
+```bash
+printf 'SMS sender number in E.164: '; IFS= read -r BANK_SMS_FROM
+az containerapp update --name "$AZ_CONTAINER_APP" --resource-group "$AZ_RESOURCE_GROUP" --set-env-vars "TWILIO_SMS_FROM=$BANK_SMS_FROM" --output none
+unset BANK_SMS_FROM
 ```
 
 Add the approved Enhanced Branded Calling number and OpenAI key for the live voice step. Twilio ConversationRelay handles ElevenLabs voice output; the app uses its own OpenAI key for the agent's replies. [US Enhanced Branded Calling](https://www.twilio.com/docs/voice/branded-calling/us-enhanced) · [ConversationRelay](https://www.twilio.com/docs/voice/twiml/connect/conversationrelay)

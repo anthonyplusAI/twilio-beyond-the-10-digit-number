@@ -1,12 +1,16 @@
 /*
  * Audience-facing, CSS-rendered customer phone simulation.
- * RCS action layout on iOS: https://www.twilio.com/docs/content/twiliocard
+ * RCS sender fields and Android rich-card layout:
+ * https://www.twilio.com/docs/rcs/onboarding
+ * https://www.twilio.com/docs/content/twiliocard
  * Enhanced Branded Calling iPhone elements: https://www.twilio.com/docs/voice/branded-calling/us-enhanced
  */
 
 const visibleSteps = new Set([
   'unknownRinging',
   'unknownMissed',
+  'smsSent',
+  'smsIgnored',
   'rcsSent',
   'noResponse',
   'brandedRinging',
@@ -33,6 +37,12 @@ const icon = (name, extraClass = '') => {
     compose: '<path d="M14 4h5v5M9.5 14.5 19 5M18 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h5"/>',
     check: '<path d="m5 12.5 4.5 4.4L19 7.5"/>',
     plusCircle: '<circle cx="12" cy="12" r="9"/><path d="M12 7v10M7 12h10"/>',
+    arrowLeft: '<path d="m12 5-7 7 7 7M5 12h14"/>',
+    moreVertical: '<circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/>',
+    globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.4 3.6 5.4 3.6 9s-1.2 6.6-3.6 9c-2.4-2.4-3.6-5.4-3.6-9S9.6 5.4 12 3Z"/>',
+    mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/>',
+    shield: '<path d="M12 2.5 20 6v6.1c0 4.5-3 7.8-8 9.4-5-1.6-8-4.9-8-9.4V6l8-3.5Z"/><path d="m8.5 12 2.3 2.3 4.8-5"/>',
+    document: '<path d="M6 2.5h8l4 4V21H6V2.5Z"/><path d="M14 2.5V7h4M9 12h6M9 16h6"/>',
   };
 
   return `<svg class="phone-icon ${extraClass}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || ''}</svg>`;
@@ -53,8 +63,8 @@ const statusBar = (tone = 'light') => `
 
 const homeIndicator = (tone = 'light') => `<span class="phone-home-indicator phone-home-indicator-${tone}" aria-hidden="true"></span>`;
 
-const androidStatusBar = () => `
-  <div class="phone-android-status" aria-hidden="true">
+const androidStatusBar = (tone = 'light') => `
+  <div class="phone-android-status phone-android-status-${tone}" aria-hidden="true">
     <span>9:41</span>
     <span class="phone-android-camera"></span>
     <span class="phone-status-icons">
@@ -120,8 +130,7 @@ const missedCall = () => {
     </div>`;
 };
 
-// A twilio/card can contain media, title/body text, and QUICK_REPLY actions.
-// On iOS, those actions appear in a dropdown: https://www.twilio.com/docs/content/twiliocard
+// A media-rich twilio/card keeps QUICK_REPLY actions stacked inside the card on Android.
 const rcsCard = () => `
   <article class="phone-rcs-card" aria-label="Twilio Bank card purchase to review: Midlife Crisis Motors, $9,800.00 vehicle deposit, card ending 4829">
     <img class="phone-rcs-card-visual" src="/rcs-alert-card.png" alt="Twilio Bank card security graphic for a $9,800.00 vehicle deposit at Midlife Crisis Motors on card ending 4829" />
@@ -129,38 +138,110 @@ const rcsCard = () => `
       <h3>Card purchase to review</h3>
       <p>A $9,800.00 vehicle deposit at Midlife Crisis Motors was charged to card ending 4829. Was this you?</p>
     </div>
+    <div class="phone-rcs-card-actions" role="group" aria-label="Suggested replies">
+      <span class="phone-rcs-card-action">Yes, it was me</span>
+      <span class="phone-rcs-card-action">No, not me</span>
+    </div>
   </article>`;
 
-const messageScreen = (sms = false) => `
-  <div class="phone-screen phone-screen-messages" aria-label="Illustrated ${sms ? 'text fallback' : 'RCS'} fraud alert conversation with Twilio Bank">
+const rcsMessageScreen = () => `
+  <div class="phone-screen phone-screen-rcs-chat" aria-label="Illustrated Android RCS fraud alert conversation with Twilio Bank">
+    ${androidStatusBar('dark')}
+    <div class="phone-rcs-chat-nav">
+      <span class="phone-rcs-chat-back" aria-hidden="true">${icon('arrowLeft')}</span>
+      <button class="phone-rcs-chat-sender" type="button" data-rcs-profile-open aria-label="View Twilio Bank business profile">
+        <img class="phone-rcs-chat-logo" src="/rcs-sender-logo.png" alt="" />
+        <span class="phone-rcs-chat-sender-name"><strong>Twilio Bank</strong><small>RCS chat</small></span>
+      </button>
+      <span class="phone-rcs-chat-more" aria-hidden="true">${icon('moreVertical')}</span>
+    </div>
+    <div class="phone-rcs-chat-thread">
+      <div class="phone-rcs-chat-date">Today · 9:41 AM</div>
+      ${rcsCard()}
+    </div>
+    <div class="phone-rcs-chat-input" aria-hidden="true">
+      <span class="phone-rcs-chat-plus">${icon('plusCircle')}</span>
+      <span class="phone-rcs-chat-input-field">RCS message <span>${icon('mic')}</span></span>
+    </div>
+    <span class="phone-android-home-indicator phone-android-home-indicator-dark" aria-hidden="true"></span>
+  </div>`;
+
+const rcsProfileRow = (glyph, value, label) => `
+  <div class="phone-rcs-profile-row">
+    <span class="phone-rcs-profile-row-icon" aria-hidden="true">${icon(glyph)}</span>
+    <span class="phone-rcs-profile-row-text"><strong>${value}</strong><small>${label}</small></span>
+  </div>`;
+
+const rcsProfileScreen = (tab) => `
+  <div class="phone-screen phone-screen-rcs-profile" aria-label="Illustrated RCS business profile for Twilio Bank">
+    ${androidStatusBar('dark')}
+    <div class="phone-rcs-profile-nav">
+      <button class="phone-rcs-profile-back" type="button" data-rcs-profile-back aria-label="Back to Twilio Bank chat">${icon('arrowLeft')}</button>
+    </div>
+    <div class="phone-rcs-profile-scroll" data-profile-tab="${tab}">
+      <div class="phone-rcs-profile-banner"><img src="/rcs-sender-banner.png" alt="" aria-hidden="true" /></div>
+      <div class="phone-rcs-profile-identity">
+        <img class="phone-rcs-profile-logo" src="/rcs-sender-logo.png" alt="Twilio Bank logo" />
+        <h2>Twilio Bank</h2>
+        <p>Card security alerts and account updates from Twilio Bank.</p>
+      </div>
+      <div class="phone-rcs-profile-shortcuts" aria-label="Contact options shown for this sender">
+        <div class="phone-rcs-profile-shortcut"><span aria-hidden="true">${icon('phone')}</span><strong>Call</strong></div>
+        <div class="phone-rcs-profile-shortcut"><span aria-hidden="true">${icon('globe')}</span><strong>Website</strong></div>
+        <div class="phone-rcs-profile-shortcut"><span aria-hidden="true">${icon('mail')}</span><strong>Email</strong></div>
+      </div>
+      <div class="phone-rcs-profile-tabs" role="tablist" aria-label="Business profile sections">
+        <button class="phone-rcs-profile-tab ${tab === 'info' ? 'is-active' : ''}" type="button" role="tab" data-rcs-profile-tab="info" aria-selected="${tab === 'info'}" aria-controls="phone-rcs-profile-panel">Info</button>
+        <button class="phone-rcs-profile-tab ${tab === 'options' ? 'is-active' : ''}" type="button" role="tab" data-rcs-profile-tab="options" aria-selected="${tab === 'options'}" aria-controls="phone-rcs-profile-panel">Options</button>
+      </div>
+      <div class="phone-rcs-profile-panel" id="phone-rcs-profile-panel" role="tabpanel" aria-label="${tab === 'info' ? 'Business contact details' : 'Business policies'}">
+        ${tab === 'info' ? `
+          ${rcsProfileRow('phone', '+1 (888) 437-9561', 'Customer service')}
+          ${rcsProfileRow('globe', 'www.twiliobank.example', 'Website')}
+          ${rcsProfileRow('mail', 'help@twiliobank.example', 'Customer support')}` : `
+          ${rcsProfileRow('shield', 'Privacy policy', 'twiliobank.example/privacy')}
+          ${rcsProfileRow('document', 'Terms of service', 'twiliobank.example/terms')}`}
+      </div>
+    </div>
+    <span class="phone-android-home-indicator phone-android-home-indicator-dark" aria-hidden="true"></span>
+  </div>`;
+
+const firstSmsBody = 'Twilio Bank: Did you make a $9,800.00 charge at Midlife Crisis Motors? Open your banking app to review it.';
+const illustrativeSmsSender = '+1 (800) 555-0148';
+
+function formatSmsSender(sender) {
+  if (typeof sender !== 'string' || !/^\+[1-9]\d{7,14}$/.test(sender)) return illustrativeSmsSender;
+  const usNumber = /^\+1(\d{3})(\d{3})(\d{4})$/.exec(sender);
+  return usNumber ? `+1 (${usNumber[1]}) ${usNumber[2]}-${usNumber[3]}` : sender;
+}
+
+const messageScreen = (channel = 'sms', smsSender = illustrativeSmsSender) => {
+  const firstSms = channel === 'sms';
+  return `
+  <div class="phone-screen phone-screen-messages" aria-label="${firstSms ? 'Illustrated SMS conversation from an unfamiliar phone number' : 'Illustrated SMS fallback conversation from a phone number'}">
     ${statusBar('dark')}
     <div class="phone-messages-nav">
       <span class="phone-messages-back">${icon('chevron')} <span>Messages</span></span>
       <span class="phone-messages-contact">
-        <span class="phone-messages-avatar ${sms ? '' : 'phone-messages-avatar-branded'}">${sms ? '+1' : brandMark()}</span>
-        <strong>${sms ? '+1 (415) 555-0148' : 'Twilio Bank'}</strong>
+        <span class="phone-messages-avatar phone-messages-avatar-plain">${icon('person')}</span>
+        <strong>${firstSms ? smsSender : illustrativeSmsSender}</strong>
         ${icon('chevronDown')}
       </span>
       <span class="phone-messages-compose">${icon('compose')}</span>
     </div>
     <div class="phone-messages-thread">
       <div class="phone-messages-date">Today 9:41 AM</div>
-      ${sms ? `<div class="phone-messages-bubble">
-        DEMO — Twilio Bank: Did you make a $9,800.00 vehicle deposit at Midlife Crisis Motors on card ending 4829? Reply YES or NO. No real account is affected.
-      </div>` : `
-      ${rcsCard()}
-      <div class="phone-rcs-menu" aria-label="RCS suggested replies shown as an iPhone-style dropdown">
-        <div class="phone-rcs-menu-heading">Reply options ${icon('chevronDown')}</div>
-        <div class="phone-rcs-menu-item">Yes, it was me ${icon('chevron')}</div>
-        <div class="phone-rcs-menu-item">No, not me ${icon('chevron')}</div>
-      </div>`}
+      <div class="phone-messages-bubble">
+        ${firstSms ? firstSmsBody : 'Twilio Bank: Open your banking app to review the $9,800.00 charge at Midlife Crisis Motors.'}
+      </div>
     </div>
     <div class="phone-messages-input" aria-hidden="true">
       <span class="phone-messages-plus">${icon('plusCircle')}</span>
-      <span class="phone-messages-input-field">${sms ? 'Text Message' : 'Text Message · RCS'} <span class="phone-messages-mic">${icon('mic')}</span></span>
+      <span class="phone-messages-input-field">Text Message <span class="phone-messages-mic">${icon('mic')}</span></span>
     </div>
     ${homeIndicator('dark')}
   </div>`;
+};
 
 const connectedCall = () => `
   <div class="phone-screen phone-screen-call phone-screen-connected" aria-label="Illustrated connected call with Twilio">
@@ -224,33 +305,43 @@ const androidCall = (connected = false) => `
     <span class="phone-android-home-indicator" aria-hidden="true"></span>
   </div>`;
 
-export function renderPhone(state = {}) {
+export function renderPhone(state = {}, config = {}, { rcsProfileTab = null } = {}) {
   const step = state?.step;
   if (!visibleSteps.has(step)) return '';
 
   const brandedCall = step === 'brandedRinging' || step === 'reached';
   const androidPreview = brandedCall && state.callPreviewDevice === 'android';
-  const isSms = state.messageChannel === 'fallback' || ['sms', 'fallback', 'smsFallback'].includes(state.messageMode);
+  const firstSms = step === 'smsSent' || step === 'smsIgnored';
+  const isSmsFallback = state.messageChannel === 'fallback' || ['sms', 'fallback', 'smsFallback'].includes(state.messageMode);
+  const rcsScene = ['rcsSent', 'noResponse'].includes(step) && !isSmsFallback;
+  const activeRcsProfileTab = rcsScene && ['info', 'options'].includes(rcsProfileTab) ? rcsProfileTab : null;
+  const liveSms = firstSms && state.smsMode === 'live';
+  const liveSmsFailed = ['failed', 'undelivered', 'canceled'].includes(String(state.smsStatus || '').toLowerCase());
   const liveMessage = ['rcsSent', 'noResponse'].includes(step) && state.messageMode === 'live';
   const liveMessageFailed = ['failed', 'undelivered', 'canceled'].includes(String(state.messageStatus || '').toLowerCase());
-  const messageCaption = !liveMessage ? 'Simulated customer phone'
+  const smsCaption = !liveSms ? 'Simulated SMS view'
+    : String(state.smsStatus || '').toLowerCase() === 'delivered' ? 'Simulated SMS view · live SMS delivery confirmed'
+      : liveSmsFailed ? 'Simulated SMS example · live delivery failed'
+        : 'Simulated SMS example · live delivery unconfirmed';
+  const messageCaption = firstSms ? smsCaption : !liveMessage ? 'Simulated customer phone'
     : state.messageChannel === 'rcs' ? 'Simulated RCS view · live RCS delivery confirmed'
       : state.messageChannel === 'fallback' ? 'Simulated text view · number-based fallback confirmed'
         : liveMessageFailed ? 'Simulated RCS example · live delivery failed'
           : 'Simulated RCS example · live channel unconfirmed';
-  const caption = brandedCall
-    ? androidPreview ? 'Simulated Android 14+ · example reason' : 'Simulated iPhone call · name and logo only'
-    : messageCaption;
+  const caption = activeRcsProfileTab ? 'Simulated RCS business profile'
+    : brandedCall ? androidPreview ? 'Simulated Android 14+ · example reason' : 'Simulated iPhone call · name and logo only'
+      : messageCaption;
   const screen = step === 'unknownRinging' ? incomingCall(false)
     : step === 'unknownMissed' ? missedCall()
-      : step === 'rcsSent' || step === 'noResponse' ? messageScreen(isSms)
+      : firstSms ? messageScreen('sms', formatSmsSender(config?.smsSenderDisplay))
+        : step === 'rcsSent' || step === 'noResponse' ? isSmsFallback ? messageScreen('fallback') : activeRcsProfileTab ? rcsProfileScreen(activeRcsProfileTab) : rcsMessageScreen()
         : androidPreview ? androidCall(step === 'reached')
           : step === 'brandedRinging' ? incomingCall(true)
             : connectedCall();
 
   return `
     <aside class="phone-stage" aria-label="Simulated customer phone">
-      <div class="phone-device ${androidPreview ? 'phone-device-android' : ''}" data-phone-step="${step}">
+      <div class="phone-device ${androidPreview || rcsScene ? 'phone-device-android' : ''}" data-phone-step="${step}">
         <div class="phone-side-button phone-side-button-left"></div>
         <div class="phone-side-button phone-side-button-right"></div>
         ${screen}

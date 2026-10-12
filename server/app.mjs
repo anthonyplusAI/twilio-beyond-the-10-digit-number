@@ -20,9 +20,11 @@ const STEP_ACTIONS = {
   flagPurchase: 'idle',
   showUnknownCall: 'flagged',
   ignoreUnknownCall: 'unknownRinging',
-  rewind: 'unknownMissed',
-  previewRcs: 'rewound',
-  sendRcs: 'rewound',
+  previewSms: 'unknownMissed',
+  sendSms: 'unknownMissed',
+  ignoreSms: 'smsSent',
+  previewRcs: 'smsIgnored',
+  sendRcs: 'smsIgnored',
   markNoResponse: 'rcsSent',
   previewBrandedCall: 'noResponse',
   placeCall: 'noResponse',
@@ -62,6 +64,7 @@ function getConfig(env) {
   const tokenValid = Boolean(env.TWILIO_AUTH_TOKEN?.trim());
   const recipientValid = E164.test(env.DEMO_TO_NUMBER ?? '');
   const serviceValid = SID.service.test(env.TWILIO_MESSAGING_SERVICE_SID ?? '');
+  const smsSenderValid = E164.test(env.TWILIO_SMS_FROM ?? '');
   const contentValid = SID.content.test(env.TWILIO_RCS_CONTENT_SID ?? '');
   const callerValid = E164.test(env.TWILIO_VOICE_FROM ?? '');
   const relayValid = isValidRelayUrl(resolveRelayUrl(env));
@@ -69,9 +72,12 @@ function getConfig(env) {
   const voiceIdValid = isValidElevenLabsVoiceId(env.TWILIO_ELEVENLABS_VOICE_ID);
 
   return {
+    smsReady: accountValid && tokenValid && recipientValid && serviceValid && smsSenderValid,
     rcsReady: accountValid && tokenValid && recipientValid && serviceValid && contentValid,
     voiceReady: accountValid && tokenValid && recipientValid && callerValid && relayValid && openAiValid && voiceIdValid,
     recipientMasked: maskNumber(env.DEMO_TO_NUMBER),
+    smsSenderMasked: maskNumber(env.TWILIO_SMS_FROM),
+    smsSenderDisplay: smsSenderValid ? env.TWILIO_SMS_FROM : null,
     callerMasked: maskNumber(env.TWILIO_VOICE_FROM),
     contentSidConfigured: contentValid,
   };
@@ -82,14 +88,17 @@ function freshState() {
     step: 'idle',
     audienceView: 'bank',
     audienceViewRevision: 0,
+    smsMode: 'none',
     messageMode: 'none',
     messageChannel: 'none',
     callMode: 'none',
     callPreviewDevice: 'iphone',
+    smsSid: null,
     messageSid: null,
     callSid: null,
     chargeDecision: null,
     decisionSource: null,
+    smsStatus: null,
     messageStatus: null,
     callStatus: null,
     events: [],
@@ -132,6 +141,21 @@ function createTwilioClient(env, fetchImpl) {
   }
 
   return {
+    async sendSms() {
+      const result = await request('Messages.json', 'POST', {
+        To: env.DEMO_TO_NUMBER,
+        MessagingServiceSid: env.TWILIO_MESSAGING_SERVICE_SID,
+        From: env.TWILIO_SMS_FROM,
+        Body: 'Twilio Bank: Did you make a $9,800.00 charge at Midlife Crisis Motors? Open your banking app to review it.',
+      }, 'TWILIO_SMS_REJECTED');
+      if (!SID.message.test(result?.sid ?? '')
+        || typeof result?.status !== 'string'
+        || result.status.length > 50
+        || ['failed', 'undelivered', 'canceled'].includes(result.status.toLowerCase())) {
+        throw new AppError(502, 'TWILIO_SMS_REJECTED', 'Twilio did not accept the SMS. Check Twilio Console before retrying.');
+      }
+      return result;
+    },
     async sendRcs() {
       const result = await request('Messages.json', 'POST', {
         To: env.DEMO_TO_NUMBER,
@@ -241,23 +265,33 @@ function createDemo(env, fetchImpl, broadcast) {
             title: 'Unknown call missed',
             detail: 'The customer does not answer; the purchase still needs review.',
           });
-        case 'rewind':
+        case 'previewSms':
+          return publish({ step: 'smsSent', smsMode: 'simulated' }, {
+            kind: 'simulated',
+            title: 'SMS alert previewed',
+            detail: 'On-screen phone is a simulation; no SMS was sent.',
+          });
+        case 'sendSms': {
+          if (!config.smsReady) {
+            throw new AppError(503, 'SMS_NOT_CONFIGURED', 'Configure a valid Twilio account, demo recipient, Messaging Service SID, and SMS sender number before sending SMS.');
+          }
+          const result = await twilio.sendSms();
           return publish({
-            step: 'rewound',
-            messageMode: 'none',
-            messageChannel: 'none',
-            callMode: 'none',
-            callPreviewDevice: 'iphone',
-            messageSid: null,
-            callSid: null,
-            chargeDecision: null,
-            decisionSource: null,
-            messageStatus: null,
-            callStatus: null,
+            step: 'smsSent',
+            smsMode: 'live',
+            smsSid: result.sid,
+            smsStatus: typeof result.status === 'string' ? result.status : null,
           }, {
-            kind: 'system',
-            title: 'Rewind to the same purchase',
-            detail: 'Now the customer sees the branded route.',
+            kind: 'real',
+            title: 'Twilio accepted SMS request',
+            detail: `SMS ${result.sid}; status ${result.status ?? 'unknown'}. Delivery is not yet confirmed.`,
+          });
+        }
+        case 'ignoreSms':
+          return publish({ step: 'smsIgnored' }, {
+            kind: 'simulated',
+            title: 'Unbranded SMS ignored',
+            detail: 'Anthony does not recognize the sender number, so the purchase still needs review.',
           });
         case 'previewRcs':
           return publish({ step: 'rcsSent', messageMode: 'simulated', messageChannel: 'simulated' }, {
@@ -332,6 +366,9 @@ function createDemo(env, fetchImpl, broadcast) {
           return publish({ audienceView: 'bank', audienceViewRevision: state.audienceViewRevision + 1 });
         case 'refreshStatuses': {
           const checks = [];
+          if (state.smsMode === 'live' && state.smsSid) {
+            checks.push(twilio.getMessage(state.smsSid).then((result) => ['sms', result]));
+          }
           if (state.messageMode === 'live' && state.messageSid) {
             checks.push(twilio.getMessage(state.messageSid).then((result) => ['message', result]));
           }
@@ -343,11 +380,12 @@ function createDemo(env, fetchImpl, broadcast) {
           const update = {};
           const events = [];
           for (const [type, result] of results) {
-            const sid = type === 'message' ? state.messageSid : state.callSid;
+            const sid = type === 'sms' ? state.smsSid : type === 'message' ? state.messageSid : state.callSid;
             if (result?.sid !== sid || typeof result.status !== 'string' || result.status.length > 50) {
               throw new AppError(502, 'TWILIO_STATUS_FAILED', 'Twilio returned an unexpected status response. Check Twilio Console.');
             }
-            const key = type === 'message' ? 'messageStatus' : 'callStatus';
+            const key = type === 'sms' ? 'smsStatus' : type === 'message' ? 'messageStatus' : 'callStatus';
+            const label = type === 'sms' ? 'SMS' : type === 'message' ? 'RCS message' : 'Call';
             let nextChannel = state.messageChannel;
             if (type === 'message') {
               const status = result.status.toLowerCase();
@@ -372,9 +410,9 @@ function createDemo(env, fetchImpl, broadcast) {
                 at: new Date().toISOString(),
                 kind: 'real',
                 title: type === 'message' && nextChannel !== state.messageChannel && result.status === state[key]
-                  ? `Message channel: ${nextChannel}`
-                  : `${type === 'message' ? 'Message' : 'Call'} status: ${result.status}`,
-                detail: `${type === 'message' ? 'Message' : 'Call'} ${sid} reported by Twilio.${channelDetail}`,
+                  ? `RCS message channel: ${nextChannel}`
+                  : `${label} status: ${result.status}`,
+                detail: `${label} ${sid} reported by Twilio.${channelDetail}`,
               });
             }
           }

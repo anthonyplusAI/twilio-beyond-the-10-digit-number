@@ -1,0 +1,160 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: twilio-bank-webinar-production
+  cancel-in-progress: false
+
+env:
+  ACR_NAME: ${{ vars.ACR_NAME }}
+  ACR_REPOSITORY: twilio-bank-webinar-demo
+  ACA_NAME: ${{ vars.ACA_NAME }}
+  ACA_RESOURCE_GROUP: ${{ vars.ACA_RESOURCE_GROUP }}
+  AZURE_CORE_OUTPUT: none
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - name: Require main branch and deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo '::error::Deploy only runs from main. Select main for workflow_dispatch.'
+            exit 1
+          fi
+          missing=0
+          for name in ACR_NAME ACA_NAME ACA_RESOURCE_GROUP AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is missing. See docs/INFRA_SETUP.md."
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+  build-and-push:
+    needs: [ci, preflight]
+    if: ${{ needs.ci.result == 'success' && needs.preflight.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      image: ${{ steps.image.outputs.ref }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set image reference
+        id: image
+        run: echo "ref=${ACR_NAME}.azurecr.io/${ACR_REPOSITORY}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+      - name: Sign in to Azure with GitHub OIDC
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Sign in to Azure Container Registry
+        run: az acr login --name "$ACR_NAME"
+      - uses: docker/setup-buildx-action@v4
+      - name: Build and push immutable image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.image.outputs.ref }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      IMAGE: ${{ needs.build-and-push.outputs.image }}
+    steps:
+      - name: Sign in to Azure with GitHub OIDC
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Update the Container App image
+        run: |
+          az containerapp update \
+            --name "$ACA_NAME" \
+            --resource-group "$ACA_RESOURCE_GROUP" \
+            --image "$IMAGE" \
+            --min-replicas 1 \
+            --max-replicas 1 \
+            --output none
+      - name: Check deployed image and public hostname
+        id: app
+        shell: bash
+        run: |
+          set -euo pipefail
+          deployed_image=$(az containerapp show --name "$ACA_NAME" --resource-group "$ACA_RESOURCE_GROUP" --query 'properties.template.containers[0].image' --output tsv)
+          if [ "$deployed_image" != "$IMAGE" ]; then
+            echo '::error::The Container App does not report the requested image.'
+            exit 1
+          fi
+          fqdn=$(az containerapp show --name "$ACA_NAME" --resource-group "$ACA_RESOURCE_GROUP" --query 'properties.configuration.ingress.fqdn' --output tsv)
+          if [ -z "$fqdn" ]; then
+            echo '::error::The Container App has no public ingress hostname.'
+            exit 1
+          fi
+          echo "fqdn=$fqdn" >> "$GITHUB_OUTPUT"
+      - name: Wait for the new revision to be ready
+        shell: bash
+        run: |
+          for attempt in $(seq 1 30); do
+            latest=$(az containerapp show --name "$ACA_NAME" --resource-group "$ACA_RESOURCE_GROUP" --query 'properties.latestRevisionName' --output tsv)
+            ready=$(az containerapp show --name "$ACA_NAME" --resource-group "$ACA_RESOURCE_GROUP" --query 'properties.latestReadyRevisionName' --output tsv)
+            revision_image=''
+            if [ -n "$latest" ]; then
+              revision_image=$(az containerapp revision show --name "$ACA_NAME" --resource-group "$ACA_RESOURCE_GROUP" --revision "$latest" --query 'properties.template.containers[0].image' --output tsv 2>/dev/null || true)
+            fi
+            if [ -n "$latest" ] && [ "$latest" = "$ready" ] && [ "$revision_image" = "$IMAGE" ]; then
+              echo "Revision $latest is ready."
+              exit 0
+            fi
+            echo "Revision readiness check $attempt: waiting for the new image."
+            sleep 10
+          done
+          echo '::error::The new Container App revision did not become ready.'
+          exit 1
+      - name: Smoke test public health and banking page
+        env:
+          FQDN: ${{ steps.app.outputs.fqdn }}
+        shell: bash
+        run: |
+          for attempt in $(seq 1 30); do
+            bank_status='not checked'
+            status=$(curl --silent --show-error --max-time 10 --output /dev/null --write-out '%{http_code}' "https://${FQDN}/healthz" || true)
+            if [ "$status" = 200 ]; then
+              bank_status=$(curl --silent --show-error --max-time 10 --output /dev/null --write-out '%{http_code}' "https://${FQDN}/bank" || true)
+              if [ "$bank_status" = 200 ]; then
+                echo "Deployed app serves /healthz and /bank at https://${FQDN}"
+                exit 0
+              fi
+            fi
+            echo "Smoke attempt $attempt: health=${status:-no response}, bank=$bank_status; retrying."
+            sleep 10
+          done
+          echo '::error::Public /healthz and /bank did not both return HTTP 200.'
+          exit 1

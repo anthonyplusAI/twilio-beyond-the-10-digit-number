@@ -38,3 +38,7 @@ Open the private **Presenter** URL printed in the terminal, then click **Open au
 The RCS branch uses a Messaging Service and a Content Template. With both RCS and SMS/MMS senders in its pool, Twilio can attempt RCS first and fall back to a supported text channel. The follow-up call is a separate decision made by the application. For a live call, the Calls API connects to ConversationRelay; the app sends each caller turn to an LLM and returns the response for ElevenLabs speech. [RCS sending and fallback](https://www.twilio.com/docs/rcs/send-an-rcs-message) · [Calls API](https://www.twilio.com/docs/voice/api/call-resource) · [ConversationRelay WebSocket messages](https://www.twilio.com/docs/voice/conversationrelay/websocket-messages)
 
 To configure real sends, rehearse device behavior, or operate the webinar, see the [presenter guide](PRESENTER.md).
+
+## Hosting a webinar copy
+
+Presenters can host the app on Azure Container Apps so the site and live ConversationRelay endpoint share one HTTPS hostname. See the [deployment guide](docs/DEPLOYMENT.md), [one-time Azure setup](docs/INFRA_SETUP.md), and [CI checks](docs/CICD.md). Keep the token-bearing presenter URL private and share only the audience window. [Azure WebSocket ingress](https://learn.microsoft.com/en-us/azure/container-apps/ingress-overview) · [Twilio ConversationRelay onboarding](https://www.twilio.com/docs/voice/conversationrelay/onboarding)

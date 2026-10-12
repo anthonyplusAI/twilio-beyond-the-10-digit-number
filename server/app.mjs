@@ -3,7 +3,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { dirname, extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRelayTwiml, isValidElevenLabsVoiceId, isValidRelayUrl } from './voice-agent.mjs';
+import { attachVoiceRelay, createRelayTwiml, isValidElevenLabsVoiceId, isValidPublicBaseUrl, isValidRelayUrl, resolveRelayUrl } from './voice-agent.mjs';
 
 const moduleDir = dirname(fileURLToPath(import.meta.url));
 const defaultPublicDir = resolve(moduleDir, '../public');
@@ -51,6 +51,13 @@ class AppError extends Error {
   }
 }
 
+function isValidPresenterToken(value) {
+  return typeof value === 'string'
+    && /^[A-Za-z0-9_-]{43}$/.test(value)
+    && Buffer.from(value, 'base64url').length === 32
+    && Buffer.from(value, 'base64url').toString('base64url') === value;
+}
+
 function maskNumber(number) {
   return E164.test(number ?? '') ? `•••• ${number.slice(-4)}` : null;
 }
@@ -62,7 +69,7 @@ function getConfig(env) {
   const serviceValid = SID.service.test(env.TWILIO_MESSAGING_SERVICE_SID ?? '');
   const contentValid = SID.content.test(env.TWILIO_RCS_CONTENT_SID ?? '');
   const callerValid = E164.test(env.TWILIO_VOICE_FROM ?? '');
-  const relayValid = isValidRelayUrl(env.TWILIO_CONVERSATION_RELAY_URL);
+  const relayValid = isValidRelayUrl(resolveRelayUrl(env));
   const openAiValid = Boolean(env.OPENAI_API_KEY?.trim());
   const voiceIdValid = isValidElevenLabsVoiceId(env.TWILIO_ELEVENLABS_VOICE_ID);
 
@@ -456,9 +463,24 @@ async function serveStatic(req, res, pathname, publicDir) {
   }
 }
 
-export function createAppServer({ env = process.env, fetchImpl = fetch, publicDir = defaultPublicDir } = {}) {
+export function createAppServer({ env = process.env, fetchImpl = fetch, publicDir = defaultPublicDir, relayOptions = {} } = {}) {
   const staticRoot = resolve(publicDir);
-  const presenterToken = randomBytes(32).toString('base64url');
+  if (env.PUBLIC_BASE_URL && !isValidPublicBaseUrl(env.PUBLIC_BASE_URL)) {
+    throw new TypeError('PUBLIC_BASE_URL must be a public HTTPS origin with no path or credentials.');
+  }
+  const publicOrigin = env.PUBLIC_BASE_URL ? new URL(env.PUBLIC_BASE_URL).origin : null;
+  const publicHost = publicOrigin ? new URL(publicOrigin).host : null;
+  if (publicOrigin && env.TWILIO_CONVERSATION_RELAY_URL
+    && env.TWILIO_CONVERSATION_RELAY_URL !== resolveRelayUrl({ PUBLIC_BASE_URL: publicOrigin })) {
+    throw new TypeError('TWILIO_CONVERSATION_RELAY_URL must match PUBLIC_BASE_URL/voice-relay in public deployment.');
+  }
+  const suppliedToken = env.PRESENTER_TOKEN;
+  if ((suppliedToken !== undefined && suppliedToken !== '') || env.PUBLIC_BASE_URL) {
+    if (!isValidPresenterToken(suppliedToken)) {
+      throw new TypeError('PRESENTER_TOKEN must be a 32-byte base64url secret for public deployment.');
+    }
+  }
+  const presenterToken = suppliedToken || randomBytes(32).toString('base64url');
   const presenterTokenBytes = Buffer.from(presenterToken);
   const clients = new Set();
   const broadcast = (value) => {
@@ -469,14 +491,25 @@ export function createAppServer({ env = process.env, fetchImpl = fetch, publicDi
 
   const server = http.createServer(async (req, res) => {
     try {
+      if (req.method === 'GET' && req.url === '/healthz') {
+        res.writeHead(200, {
+          'content-type': 'text/plain; charset=utf-8',
+          'cache-control': 'no-store',
+          'content-length': 2,
+        });
+        res.end('ok');
+        return;
+      }
       const address = server.address();
       const port = typeof address === 'object' && address ? address.port : null;
       const host = typeof req.headers.host === 'string' ? req.headers.host.toLowerCase() : '';
       const localHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
       const remote = req.socket.remoteAddress;
       const isLoopback = remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1';
-      if (!isLoopback || !localHosts.has(host)) {
-        throw new AppError(403, 'LOCAL_ORIGIN_REQUIRED', 'Open this demo from its local URL.');
+      const localRequest = isLoopback && localHosts.has(host);
+      const publicRequest = publicHost !== null && host === publicHost;
+      if (!localRequest && !publicRequest) {
+        throw new AppError(403, 'LOCAL_ORIGIN_REQUIRED', 'Open this demo from its configured URL.');
       }
       const pathname = new URL(req.url ?? '/', `http://${host}`).pathname;
       if (pathname === '/api/state' && req.method === 'GET') {
@@ -502,8 +535,9 @@ export function createAppServer({ env = process.env, fetchImpl = fetch, publicDi
         return;
       }
       if (pathname === '/api/action' && req.method === 'POST') {
-        if (req.headers.origin && req.headers.origin !== `http://${host}`) {
-          throw new AppError(403, 'LOCAL_ORIGIN_REQUIRED', 'Presenter actions must come from the local demo origin.');
+        const expectedOrigin = publicRequest ? publicOrigin : `http://${host}`;
+        if (req.headers.origin && req.headers.origin !== expectedOrigin) {
+          throw new AppError(403, 'LOCAL_ORIGIN_REQUIRED', 'Presenter actions must come from the demo origin.');
         }
         const suppliedToken = req.headers['x-presenter-token'];
         const suppliedBytes = typeof suppliedToken === 'string' ? Buffer.from(suppliedToken) : Buffer.alloc(0);
@@ -536,6 +570,7 @@ export function createAppServer({ env = process.env, fetchImpl = fetch, publicDi
       }
     }
   });
+  attachVoiceRelay(server, { ...relayOptions, env });
   Object.defineProperty(server, 'presenterToken', { value: presenterToken });
   return server;
 }

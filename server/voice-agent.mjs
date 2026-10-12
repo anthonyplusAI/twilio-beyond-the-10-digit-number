@@ -48,6 +48,32 @@ export function isValidRelayUrl(value) {
   }
 }
 
+export function isValidPublicBaseUrl(value) {
+  if (typeof value !== 'string' || !value || value !== value.trim()) return false;
+  try {
+    const url = new URL(value);
+    const relay = new URL(RELAY_PATH, url);
+    relay.protocol = 'wss:';
+    return url.protocol === 'https:'
+      && url.pathname === '/'
+      && url.username === ''
+      && url.password === ''
+      && url.search === ''
+      && url.hash === ''
+      && isValidRelayUrl(relay.toString());
+  } catch {
+    return false;
+  }
+}
+
+export function resolveRelayUrl(env = process.env) {
+  if (env.TWILIO_CONVERSATION_RELAY_URL) return env.TWILIO_CONVERSATION_RELAY_URL;
+  if (!isValidPublicBaseUrl(env.PUBLIC_BASE_URL)) return null;
+  const relay = new URL(RELAY_PATH, env.PUBLIC_BASE_URL);
+  relay.protocol = 'wss:';
+  return relay.toString();
+}
+
 export function isValidElevenLabsVoiceId(value) {
   if (value === undefined || value === '') return true;
   if (typeof value !== 'string') return false;
@@ -68,7 +94,7 @@ export function isValidElevenLabsVoiceId(value) {
 }
 
 export function createRelayTwiml(env = process.env) {
-  const url = env.TWILIO_CONVERSATION_RELAY_URL;
+  const url = resolveRelayUrl(env);
   if (!isValidRelayUrl(url)) {
     throw new TypeError('TWILIO_CONVERSATION_RELAY_URL must be a public wss:// URL ending in /voice-relay.');
   }
@@ -124,7 +150,19 @@ export function createVoiceRelayServer({
   streamReply = createOpenAiStreamReply({ env }),
   validateSignature = twilio.validateRequest,
 } = {}) {
-  const url = env.TWILIO_CONVERSATION_RELAY_URL;
+  const server = http.createServer((_req, res) => {
+    res.writeHead(404, { 'content-length': 0, 'cache-control': 'no-store' });
+    res.end();
+  });
+  return attachVoiceRelay(server, { env, streamReply, validateSignature });
+}
+
+export function attachVoiceRelay(server, {
+  env = process.env,
+  streamReply = createOpenAiStreamReply({ env }),
+  validateSignature = twilio.validateRequest,
+} = {}) {
+  const url = resolveRelayUrl(env);
   const ready = isValidRelayUrl(url)
     && Boolean(env.TWILIO_ACCOUNT_SID?.trim())
     && Boolean(env.TWILIO_AUTH_TOKEN?.trim())
@@ -132,16 +170,25 @@ export function createVoiceRelayServer({
     && Boolean(env.TWILIO_VOICE_FROM?.trim())
     && Boolean(env.OPENAI_API_KEY?.trim())
     && isValidElevenLabsVoiceId(env.TWILIO_ELEVENLABS_VOICE_ID);
-  const server = http.createServer((_req, res) => {
-    res.writeHead(404, { 'content-length': 0, 'cache-control': 'no-store' });
-    res.end();
-  });
+  const publicHost = isValidPublicBaseUrl(env.PUBLIC_BASE_URL) ? new URL(env.PUBLIC_BASE_URL).host.toLowerCase() : null;
   const wss = new WebSocketServer({ noServer: true, maxPayload: 8_192, perMessageDeflate: false });
 
   server.on('upgrade', (req, socket, head) => {
     if (req.url !== RELAY_PATH) {
       rejectUpgrade(socket, 404, 'Not Found');
       return;
+    }
+    if (publicHost) {
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : null;
+      const requestHost = typeof req.headers.host === 'string' ? req.headers.host.toLowerCase() : '';
+      const remote = req.socket.remoteAddress;
+      const localRequest = (remote === '127.0.0.1' || remote === '::1' || remote === '::ffff:127.0.0.1')
+        && (requestHost === `127.0.0.1:${port}` || requestHost === `localhost:${port}`);
+      if (requestHost !== publicHost && !localRequest) {
+        rejectUpgrade(socket, 403, 'Forbidden');
+        return;
+      }
     }
     if (!ready) {
       rejectUpgrade(socket, 503, 'Service Unavailable');

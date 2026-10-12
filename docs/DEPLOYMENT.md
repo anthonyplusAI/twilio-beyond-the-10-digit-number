@@ -1,0 +1,25 @@
+# Deploying the webinar demo
+
+The presenter site, customer banking view, API, and ConversationRelay WebSocket share one Node server on port 8080. Azure Container Apps gives that server one public HTTPS hostname and supports WebSocket upgrades. This demo's voice URL is `wss://twilio-branded-comms.jollymushroom-29e673c9.centralus.azurecontainerapps.io/voice-relay`. [Azure ingress](https://learn.microsoft.com/en-us/azure/container-apps/ingress-overview) · [Twilio ConversationRelay onboarding](https://www.twilio.com/docs/voice/conversationrelay/onboarding)
+
+## First deployment
+
+1. Complete the [one-time Azure and GitHub setup](INFRA_SETUP.md). The application must already exist with external ingress on port 8080, a stable `PRESENTER_TOKEN`, and `PUBLIC_BASE_URL=https://<app-fqdn>`.
+2. Push to `main`, or run `gh workflow run deploy.yml --ref main`. Follow the run with `gh run watch --exit-status` or in GitHub Actions.
+3. Confirm `https://<app-fqdn>/healthz` returns HTTP 200. Open `https://<app-fqdn>/bank` in the audience window. Open `https://<app-fqdn>/presenter#token=<your-saved-token>` in a separate, private window.
+4. Add the live Twilio and OpenAI values to the Container App as described in [live demo settings](INFRA_SETUP.md#live-demo-settings). The app can run the simulated story before those values are present.
+
+The Container App hostname also serves `/rcs-sender-logo.png`, `/rcs-sender-banner.png`, and `/rcs-alert-card.png` as stable public HTTPS assets for the RCS test setup. An RCS Sender still needs its normal Twilio onboarding and accepted test device. [Twilio RCS onboarding](https://www.twilio.com/docs/rcs/onboarding)
+
+## How releases work
+
+The [CI workflow](CICD.md) runs `npm ci`, syntax checks, and tests. Only a passing `Validate` job allows the deploy workflow to build a Node 22 image, push an image tagged with the full commit SHA to Azure Container Registry, update the Container App, wait for the new revision to be ready, and check `/healthz` and `/bank`. GitHub signs in to Azure through OIDC; app credentials stay in Container Apps secrets and are never copied into the image or GitHub Actions. [Azure GitHub Actions](https://learn.microsoft.com/en-us/azure/container-apps/github-actions) · [Azure revisions](https://learn.microsoft.com/en-us/azure/container-apps/revisions-manage) · [Azure OIDC](https://learn.microsoft.com/en-us/azure/developer/github/connect-from-azure-openid-connect) · [Container Apps secrets](https://learn.microsoft.com/en-us/azure/container-apps/manage-secrets)
+
+The deploy workflow changes only the image and replica limits. It leaves runtime environment variables and secrets alone. To change a Twilio SID, number, API key, presenter token, or public URL, update the Container App configuration separately. Avoid deploying during the webinar: story state and live call history are in memory, so a new revision or restart resets them. One warm replica avoids scale-to-zero delay; Azure may temporarily run an extra replica during maintenance. [Azure scaling](https://learn.microsoft.com/en-us/azure/container-apps/scale-app)
+
+## Troubleshooting
+
+- **Preflight fails:** set the three GitHub variables and three OIDC identity values listed in [INFRA_SETUP.md](INFRA_SETUP.md). The workflow accepts only `main`.
+- **Image push succeeds, rollout says `UNAUTHORIZED`:** confirm the Container App's managed identity has `AcrPull` on the registry and `az containerapp registry set` points to that identity. [Microsoft image-pull guide](https://learn.microsoft.com/en-us/azure/container-apps/managed-identity-image-pull)
+- **Health smoke fails:** check `PUBLIC_BASE_URL`, `PRESENTER_TOKEN`, port 8080, and revision logs with `az containerapp logs show --name <app> --resource-group <group> --follow`.
+- **The live call button stays disabled:** check the Twilio account, approved voice number, destination number, Auth Token, and OpenAI key. The WebSocket URL is derived from `PUBLIC_BASE_URL` unless explicitly overridden. Twilio also requires ConversationRelay onboarding. [Twilio onboarding](https://www.twilio.com/docs/voice/conversationrelay/onboarding)

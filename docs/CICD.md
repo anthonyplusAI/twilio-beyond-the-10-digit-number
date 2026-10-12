@@ -1,0 +1,9 @@
+# CI and deployment checks
+
+The [CI workflow](../.github/workflows/ci.yml) runs on pull requests and as the first job of [Deploy](../.github/workflows/deploy.yml). It uses Node 22, matching the container image, and runs `npm ci`, `npm run check`, and `npm test`. The final check is named **Validate**; a failed or skipped check blocks image build and deployment. The reusable CI workflow receives no Azure or application secrets.
+
+Deploy runs on pushes to `main` and can be started manually on `main`. A preflight job checks the GitHub repository variables `ACR_NAME`, `ACA_NAME`, `ACA_RESOURCE_GROUP` and the GitHub OIDC identity secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`. It reports missing names without printing values. See [INFRA_SETUP.md](INFRA_SETUP.md) to configure them.
+
+After both Validate and preflight pass, Deploy authenticates with Azure using GitHub OIDC, pushes a full-commit-SHA image, updates the existing Container App, waits until the new image's revision is ready, and polls public `/healthz` and `/bank`. The deploy concurrency group queues later deployments rather than cancelling one mid-rollout. Application secrets are configured directly in Azure Container Apps and are not synchronized by GitHub Actions. [Azure Login OIDC](https://github.com/Azure/login) · [Azure Container Apps releases](https://learn.microsoft.com/en-us/azure/container-apps/github-actions) · [Revision readiness](https://learn.microsoft.com/en-us/azure/container-apps/revisions-manage)
+
+A green workflow proves that the current image serves `/healthz` from Azure. It does not prove RCS delivery, ConversationRelay onboarding, or branded caller presentation on a particular handset; rehearse those live steps separately with the [presenter guide](../PRESENTER.md). [Twilio RCS testing](https://www.twilio.com/docs/rcs/onboarding) · [Twilio ConversationRelay onboarding](https://www.twilio.com/docs/voice/conversationrelay/onboarding)

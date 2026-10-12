@@ -103,6 +103,15 @@ test('call TwiML selects ConversationRelay and ElevenLabs without a scripted Say
   assert.doesNotMatch(xml, /<Say>/);
 });
 
+test('public HTTPS origin supplies the ConversationRelay WSS URL', () => {
+  const xml = createRelayTwiml({
+    ...env,
+    TWILIO_CONVERSATION_RELAY_URL: '',
+    PUBLIC_BASE_URL: 'https://demo.example.test',
+  });
+  assert.match(xml, /url="wss:\/\/demo\.example\.test\/voice-relay"/);
+});
+
 test('OpenAI adapter streams model text chunks with the call history', async () => {
   const requests = [];
   const client = {

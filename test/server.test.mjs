@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
+import { randomBytes } from 'node:crypto';
+import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import twilio from 'twilio';
+import WebSocket from 'ws';
 import { createAppServer } from '../server/app.mjs';
 
 const ACCOUNT_SID = `AC${'a'.repeat(32)}`;
@@ -51,6 +55,35 @@ async function action(base, name, rest = {}) {
     body: JSON.stringify({ action: name, ...rest }),
   });
   return { status: response.status, body: await response.json() };
+}
+
+async function requestWithHeaders(base, path, { method = 'GET', headers = {}, body = '' } = {}) {
+  const target = new URL(base);
+  return new Promise((resolve, reject) => {
+    const request = http.request({
+      hostname: target.hostname,
+      port: target.port,
+      path,
+      method,
+      headers,
+    }, (response) => {
+      let text = '';
+      response.setEncoding('utf8');
+      response.on('data', (chunk) => { text += chunk; });
+      response.on('end', () => resolve({ status: response.statusCode, body: text }));
+    });
+    request.on('error', reject);
+    request.end(body);
+  });
+}
+
+async function unusedPort() {
+  const probe = http.createServer();
+  probe.listen(0, '127.0.0.1');
+  await once(probe, 'listening');
+  const port = probe.address().port;
+  await new Promise((resolve) => probe.close(resolve));
+  return port;
 }
 
 test('presenter actions require a private per-server token while audience state remains readable', async () => {
@@ -122,6 +155,198 @@ test('non-loopback Host and cross-origin presenter requests are rejected', async
     assert.equal(sameOrigin.status, 200);
     assert.equal((await sameOrigin.json()).state.step, 'flagged');
   });
+});
+
+test('public deployment requires a stable presenter token before the server starts', () => {
+  assert.throws(
+    () => createAppServer({ env: { PUBLIC_BASE_URL: 'https://demo.example.test' } }),
+    /PRESENTER_TOKEN/,
+  );
+  assert.throws(
+    () => createAppServer({ env: { PUBLIC_BASE_URL: 'https://demo.example.test', PRESENTER_TOKEN: 'guess-me' } }),
+    /PRESENTER_TOKEN/,
+  );
+});
+
+test('public deployment accepts only a bare HTTPS origin', () => {
+  const token = randomBytes(32).toString('base64url');
+  for (const publicBaseUrl of ['http://demo.example.test', 'https://demo.example.test/bank', 'https://user@demo.example.test']) {
+    assert.throws(
+      () => createAppServer({ env: { PUBLIC_BASE_URL: publicBaseUrl, PRESENTER_TOKEN: token } }),
+      /PUBLIC_BASE_URL/,
+    );
+  }
+});
+
+test('public deployment rejects a relay URL on a different origin', () => {
+  assert.throws(() => createAppServer({ env: {
+    PUBLIC_BASE_URL: 'https://demo.example.test',
+    PRESENTER_TOKEN: randomBytes(32).toString('base64url'),
+    TWILIO_CONVERSATION_RELAY_URL: 'wss://other.example.test/voice-relay',
+  } }), /TWILIO_CONVERSATION_RELAY_URL/);
+});
+
+test('public deployment accepts only its configured Host and same-origin presenter actions', async () => {
+  const token = randomBytes(32).toString('base64url');
+  const env = { ...liveEnv, TWILIO_CONVERSATION_RELAY_URL: '', PUBLIC_BASE_URL: 'https://demo.example.test', PRESENTER_TOKEN: token };
+  await withServer(async (base, activeToken) => {
+    assert.equal(activeToken, token);
+    const publicState = await requestWithHeaders(base, '/api/state', { headers: { host: 'demo.example.test' } });
+    assert.equal(publicState.status, 200);
+    assert.equal(JSON.parse(publicState.body).state.step, 'idle');
+
+    const wrongHost = await requestWithHeaders(base, '/api/state', { headers: { host: 'attacker.example.test' } });
+    assert.equal(wrongHost.status, 403);
+
+    const actionBody = JSON.stringify({ action: 'flagPurchase' });
+    const wrongOrigin = await requestWithHeaders(base, '/api/action', {
+      method: 'POST',
+      headers: {
+        host: 'demo.example.test', origin: 'https://attacker.example.test',
+        'content-type': 'application/json', 'x-presenter-token': token,
+      },
+      body: actionBody,
+    });
+    assert.equal(wrongOrigin.status, 403);
+
+    const validAction = await requestWithHeaders(base, '/api/action', {
+      method: 'POST',
+      headers: {
+        host: 'demo.example.test', origin: 'https://demo.example.test',
+        'content-type': 'application/json', 'x-presenter-token': token,
+      },
+      body: actionBody,
+    });
+    assert.equal(validAction.status, 200);
+    assert.equal(JSON.parse(validAction.body).state.step, 'flagged');
+  }, { env });
+});
+
+test('health probe responds without a presenter token or public Host header', async () => {
+  const env = {
+    PUBLIC_BASE_URL: 'https://demo.example.test',
+    PRESENTER_TOKEN: randomBytes(32).toString('base64url'),
+  };
+  await withServer(async (base) => {
+    const response = await requestWithHeaders(base, '/healthz', { headers: { host: 'probe.internal' } });
+    assert.equal(response.status, 200);
+    assert.equal(response.body, 'ok');
+  }, { env });
+});
+
+test('voice readiness uses the WebSocket URL derived from the public origin', async () => {
+  const env = {
+    ...liveEnv,
+    TWILIO_CONVERSATION_RELAY_URL: '',
+    PUBLIC_BASE_URL: 'https://demo.example.test',
+    PRESENTER_TOKEN: randomBytes(32).toString('base64url'),
+  };
+  await withServer(async (base) => {
+    const response = await requestWithHeaders(base, '/api/state', { headers: { host: 'demo.example.test' } });
+    assert.equal(response.status, 200);
+    assert.equal(JSON.parse(response.body).config.voiceReady, true);
+  }, { env });
+});
+
+test('one public port serves the site and a Twilio-signed ConversationRelay WebSocket', { timeout: 5_000 }, async () => {
+  const env = {
+    ...liveEnv,
+    TWILIO_CONVERSATION_RELAY_URL: '',
+    PUBLIC_BASE_URL: 'https://demo.example.test',
+    PRESENTER_TOKEN: randomBytes(32).toString('base64url'),
+  };
+  await withServer(async (base) => {
+    const page = await requestWithHeaders(base, '/bank', { headers: { host: 'demo.example.test' } });
+    assert.equal(page.status, 200);
+
+    const signature = twilio.getExpectedTwilioSignature(
+      env.TWILIO_AUTH_TOKEN,
+      'wss://demo.example.test/voice-relay',
+      {},
+    );
+    const socket = new WebSocket(`${base.replace('http:', 'ws:')}/voice-relay`, {
+      headers: { host: 'demo.example.test', 'x-twilio-signature': signature },
+    });
+    try {
+      await once(socket, 'open');
+      const reply = new Promise((resolve, reject) => {
+        let spoken = '';
+        const timer = setTimeout(() => reject(new Error('Timed out waiting for agent reply.')), 3_000);
+        socket.on('message', (raw) => {
+          const packet = JSON.parse(raw.toString());
+          if (packet.type !== 'text') return;
+          spoken += packet.token;
+          if (packet.last) {
+            clearTimeout(timer);
+            resolve(spoken);
+          }
+        });
+      });
+      socket.send(JSON.stringify({
+        type: 'setup',
+        accountSid: env.TWILIO_ACCOUNT_SID,
+        callSid: CALL_SID,
+        from: env.TWILIO_VOICE_FROM,
+        to: env.DEMO_TO_NUMBER,
+      }));
+      socket.send(JSON.stringify({ type: 'prompt', voicePrompt: 'What should I do?', last: true }));
+      assert.equal(await reply, 'Please review the banking app.');
+    } finally {
+      socket.terminate();
+    }
+  }, {
+    env,
+    relayOptions: { streamReply: async function* () { yield 'Please review the banking app.'; } },
+  });
+});
+
+test('public entrypoint starts one port and keeps the presenter token out of logs', { timeout: 8_000 }, async () => {
+  const port = await unusedPort();
+  const oldRelayPort = await unusedPort();
+  const token = randomBytes(32).toString('base64url');
+  const child = spawn(process.execPath, ['server/index.mjs'], {
+    cwd: new URL('..', import.meta.url),
+    env: {
+      PORT: String(port),
+      VOICE_PORT: String(oldRelayPort),
+      PUBLIC_BASE_URL: 'https://demo.example.test',
+      PRESENTER_TOKEN: token,
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let output = '';
+  let errors = '';
+  child.stdout.setEncoding('utf8');
+  child.stderr.setEncoding('utf8');
+  child.stdout.on('data', (chunk) => { output += chunk; });
+  child.stderr.on('data', (chunk) => { errors += chunk; });
+  try {
+    let startupTimer;
+    try {
+      await Promise.race([
+        new Promise((resolve, reject) => {
+          child.stdout.on('data', () => {
+            if (output.includes('Conversation Relay')) resolve();
+          });
+          child.on('exit', (code) => reject(new Error(`Server exited with ${code}: ${errors}`)));
+        }),
+        new Promise((_, reject) => {
+          startupTimer = setTimeout(() => reject(new Error(`Server startup timed out: ${errors}`)), 5_000);
+        }),
+      ]);
+    } finally {
+      clearTimeout(startupTimer);
+    }
+    assert.doesNotMatch(output, new RegExp(token));
+    const health = await fetch(`http://127.0.0.1:${port}/healthz`);
+    assert.equal(health.status, 200);
+    await assert.rejects(fetch(`http://127.0.0.1:${oldRelayPort}/voice-relay`, { signal: AbortSignal.timeout(500) }));
+  } finally {
+    if (child.exitCode === null) {
+      child.kill('SIGTERM');
+      await once(child, 'exit');
+    }
+  }
 });
 
 async function toRewound(base) {

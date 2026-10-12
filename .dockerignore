@@ -1,0 +1,12 @@
+.git
+.github
+.env*
+node_modules
+coverage
+docs
+test
+PRESENTER.md
+README.md
+*.log
+.DS_Store
+preview-*.jpg

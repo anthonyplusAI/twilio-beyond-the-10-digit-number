@@ -8,7 +8,9 @@ Run the local server:
 
     npm run dev
 
-Open the **Presenter** URL printed in the terminal. Its fragment contains a session token, so keep that tab private. Click **Open audience window** and share only that window. The audience starts at /bank; **Show architecture** changes the same shared window to /architecture. The prominent next step ends at **Story complete**; use the lower controls to revisit a view or reset.
+Open the **Presenter** URL printed in the terminal. Its fragment contains a session token, so keep that tab private. Click **Open audience window** and share only that window. The audience starts at /bank; **Show architecture** changes the same shared window to /architecture. The prominent next step ends at **Story complete**. Use **Restart story** in the current step box to begin again at any point; this clears the local story and returns the audience to the bank view, but does not cancel a message or call already placed.
+
+Green **Real phone** buttons make live Twilio requests. After an accepted live message or call request, the step box turns green and prompts you to check your actual phone. Preview buttons change only the illustrated phone. API acceptance does not guarantee handset delivery or a human answer. [Message statuses](https://www.twilio.com/docs/messaging/api/message-resource) · [Call statuses](https://www.twilio.com/docs/voice/api/call-resource)
 
 The banking app and iPhone/Android phone illustrations are simulations. If you also share your own handset, identify it as the live device. The demo never captures your phone.
 

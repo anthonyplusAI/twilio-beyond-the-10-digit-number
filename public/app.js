@@ -31,6 +31,9 @@ let pendingAction = null;
 let actionError = '';
 let transportError = '';
 let deferredPresenterFocus = null;
+let lastPhoneCueKey = '';
+let pulsingPhoneCueKey = '';
+let phoneCuePulseTimer = null;
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (character) => ({
@@ -92,6 +95,9 @@ function sceneFor(state) {
       : { ...scene, short: 'RCS preview shown', cue: 'This is a preview. No message was sent. The iPhone view illustrates a rich RCS card for the same purchase.' };
   }
   if (state.step === 'brandedRinging') {
+    if (state.callMode === 'live' && ['failed', 'busy', 'no-answer', 'canceled'].includes(String(state.callStatus || '').toLowerCase())) {
+      return { ...scene, short: 'Call did not connect', caption: 'Twilio reports that the live call did not connect.', cue: 'Check the reported call status and your Twilio logs. You can still explain the fictional outcome with the illustrated phone.' };
+    }
     if (state.callPreviewDevice === 'android') {
       return {
         ...scene,
@@ -105,6 +111,40 @@ function sceneFor(state) {
       : { ...scene, short: 'Branded call preview', cue: 'This is a preview. No call was placed. The iPhone illustrates how the approved Twilio identity can appear on a supported device.' };
   }
   return scene;
+}
+
+function phoneCueFor(state) {
+  if (state.step === 'rcsSent' && state.messageMode === 'live') {
+    if (['failed', 'undelivered', 'canceled'].includes(String(state.messageStatus || '').toLowerCase())) return null;
+    const detail = state.messageChannel === 'fallback'
+      ? 'Look for the SMS fallback on your test handset. Twilio reports delivery from a phone-number sender.'
+      : state.messageChannel === 'rcs'
+        ? 'Look for the fraud alert on your test handset. Twilio reports RCS delivery.'
+        : 'Look for the fraud alert on your test handset. Twilio accepted the request; delivery is not confirmed yet.';
+    return { key: `message:${state.messageSid || 'pending'}`, detail };
+  }
+  if (state.step === 'brandedRinging' && state.callMode === 'live') {
+    if (['completed', 'failed', 'busy', 'no-answer', 'canceled'].includes(String(state.callStatus || '').toLowerCase())) return null;
+    return { key: `call:${state.callSid || 'pending'}`, detail: 'Watch your test handset for the incoming call. Twilio accepted the request; caller display and answer are not confirmed.' };
+  }
+  return null;
+}
+
+function updatePhoneCuePulse(phoneCue) {
+  const key = phoneCue?.key || '';
+  if (!key) {
+    lastPhoneCueKey = '';
+    return;
+  }
+  if (key === lastPhoneCueKey) return;
+  lastPhoneCueKey = key;
+  pulsingPhoneCueKey = key;
+  window.clearTimeout(phoneCuePulseTimer);
+  phoneCuePulseTimer = window.setTimeout(() => {
+    if (pulsingPhoneCueKey !== key) return;
+    pulsingPhoneCueKey = '';
+    root.querySelector('.current-scene-attention')?.classList.remove('current-scene-attention');
+  }, 1300);
 }
 
 function focusedPresenterControl() {
@@ -140,8 +180,10 @@ function render() {
   if (path === '/presenter') {
     deferredPresenterFocus = focusedPresenterControl() || deferredPresenterFocus;
     const notesOpen = Boolean(root.querySelector('.presenter-notes[open]'));
+    const phoneCue = phoneCueFor(state);
+    updatePhoneCuePulse(phoneCue);
     document.title = 'Presenter controls · Twilio Bank';
-    root.innerHTML = renderPresenter(state, snapshot.config);
+    root.innerHTML = renderPresenter(state, snapshot.config, phoneCue);
     if (notesOpen) root.querySelector('.presenter-notes')?.setAttribute('open', '');
     if (!pendingAction) {
       restorePresenterFocus(deferredPresenterFocus);
@@ -262,7 +304,7 @@ function presenterButton(action, label, options = {}) {
   const primary = options.primary ? ' action-primary' : '';
   const live = options.live ? ' action-live' : '';
   const selected = pendingAction === action ? ' action-pending' : '';
-  const badge = options.live ? `<span class="action-kind">Live API</span>` : options.simulated ? `<span class="action-kind action-kind-sim">Simulation</span>` : '';
+  const badge = options.live ? `<span class="action-kind">Real phone</span>` : options.simulated ? `<span class="action-kind action-kind-sim">Simulation</span>` : '';
   return `<button type="button" class="action-button${primary}${live}${selected}" data-action="${escapeHtml(action)}" ${disabled ? 'disabled' : ''}><span>${escapeHtml(pendingAction === action ? 'Working…' : label)}</span>${badge}</button>`;
 }
 
@@ -285,7 +327,7 @@ function renderNextActions(state, config) {
   }
 }
 
-function renderPresenter(state, config) {
+function renderPresenter(state, config, phoneCue) {
   const scene = sceneFor(state);
   const step = state.step;
   const rcsReady = Boolean(config.rcsReady);
@@ -307,7 +349,7 @@ function renderPresenter(state, config) {
         ${!presenterToken ? `<div class="connection-banner" role="alert">${icon('shield', 17)} Open the private Presenter URL printed in the server terminal to enable controls.</div>` : ''}
         ${actionError ? `<div class="error-banner" role="alert">${icon('alert', 18)}<span>${escapeHtml(actionError)}</span><button type="button" data-dismiss-error aria-label="Dismiss error">×</button></div>` : ''}
         ${transportError ? `<div class="connection-banner" role="status">${icon('refresh', 17)} ${escapeHtml(transportError)}</div>` : ''}
-        <section class="current-scene"><div class="current-scene-copy"><span class="current-scene-label">On screen now</span><h2>${escapeHtml(scene.short)}</h2><p>${escapeHtml(scene.caption)}</p></div><div class="current-scene-side"><span class="step-index">${String(Object.keys(SCENES).indexOf(step) + 1).padStart(2, '0')} / 09</span><div class="current-actions">${renderNextActions(state, config)}</div></div></section>
+        <section class="current-scene${phoneCue ? ' current-scene-phone' : ''}${phoneCue?.key === pulsingPhoneCueKey ? ' current-scene-attention' : ''}"><div class="current-scene-copy"><span class="current-scene-label">On screen now</span><h2>${escapeHtml(scene.short)}</h2><p>${escapeHtml(scene.caption)}</p>${phoneCue ? `<div class="current-scene-phone-cue" role="status"><strong>${icon('phone', 16)} Check your phone now</strong><span>${escapeHtml(phoneCue.detail)}</span></div>` : ''}</div><div class="current-scene-side"><span class="step-index">${String(Object.keys(SCENES).indexOf(step) + 1).padStart(2, '0')} / 09</span><div class="current-actions">${renderNextActions(state, config)}</div><button type="button" class="restart-story-button" data-action="reset" ${step === 'idle' && !state.events.length || pendingAction || !presenterToken ? 'disabled' : ''}>${icon('refresh', 14)} ${escapeHtml(pendingAction === 'reset' ? 'Restarting…' : 'Restart story')}</button></div></section>
         <section class="control-group"><div class="group-heading"><span>01</span><div><h2>Set the scene</h2><p>The same charge drives both attempts.</p></div></div><div class="action-stack">${presenterButton('flagPurchase', 'Flag the $9,800.00 charge', { disabled: step !== 'idle', primary: step === 'idle', simulated: true })}</div></section>
         <section class="control-group"><div class="group-heading"><span>02</span><div><h2>The anonymous call</h2><p>Show what Anthony sees without caller identity.</p></div></div><div class="action-stack two-up">${presenterButton('showUnknownCall', 'Show unknown call', { disabled: step !== 'flagged', primary: step === 'flagged', simulated: true })}${presenterButton('ignoreUnknownCall', 'Anthony ignores it', { disabled: step !== 'unknownRinging', primary: step === 'unknownRinging', simulated: true })}</div></section>
         <section class="control-group"><div class="group-heading"><span>03</span><div><h2>Replay with context</h2><p>Send the rich alert, then escalate if there is no reply.</p></div></div><div class="action-stack">
@@ -318,7 +360,7 @@ function renderPresenter(state, config) {
           ${canCompareCall ? `<div class="call-preview-options"><div class="call-preview-copy"><strong>Compare supported displays</strong><small>“Card security alert” is an illustrative Android 14+ reason; your registered reason is unverified.</small></div><div class="action-stack two-up">${presenterButton('showIphoneCallExample', 'iPhone · name + logo', { disabled: state.callPreviewDevice === 'iphone', simulated: true })}${presenterButton('showAndroidReasonExample', 'Android 14+ · add reason', { disabled: state.callPreviewDevice === 'android', simulated: true })}</div></div>` : ''}
           ${presenterButton('markReached', 'Mark customer reached', { disabled: step !== 'brandedRinging', primary: step === 'brandedRinging', simulated: true })}
         </div></section>
-        <section class="control-group control-group-tools"><div class="group-heading"><span>04</span><div><h2>Explain the build</h2><p>Switch the shared window to the diagram and event log.</p></div></div><div class="action-stack two-up">${presenterButton('showArchitecture', 'Show architecture', { disabled: state.audienceView === 'architecture', primary: step === 'reached' && state.audienceView !== 'architecture' })}${presenterButton('showBank', 'Show bank app', { disabled: state.audienceView === 'bank' })}</div><div class="action-stack two-up">${presenterButton('refreshStatuses', 'Refresh live statuses', { disabled: !state.messageSid && !state.callSid })}${presenterButton('reset', 'Reset story', { disabled: step === 'idle' && !state.events.length })}</div></section>
+        <section class="control-group control-group-tools"><div class="group-heading"><span>04</span><div><h2>Explain the build</h2><p>Switch the shared window to the diagram and event log.</p></div></div><div class="action-stack two-up">${presenterButton('showArchitecture', 'Show architecture', { disabled: state.audienceView === 'architecture', primary: step === 'reached' && state.audienceView !== 'architecture' })}${presenterButton('showBank', 'Show bank app', { disabled: state.audienceView === 'bank' })}</div><div class="action-stack">${presenterButton('refreshStatuses', 'Refresh live statuses', { disabled: !state.messageSid && !state.callSid })}</div></section>
       </div><aside class="presenter-sidebar">
         <section class="presenter-panel"><div class="panel-title"><h2>What to say now</h2><span>${icon('message', 18)}</span></div><p class="cue-text">${escapeHtml(scene.cue)}</p></section>
         <section class="presenter-panel"><div class="panel-title"><h2>Live setup</h2><span>${icon('shield', 18)}</span></div><div class="readiness-row"><span class="readiness-indicator ${rcsReady ? 'ready' : ''}"></span><div><strong>Rich RCS test</strong><small>${rcsReady ? `Configured for ${escapeHtml(config.recipientMasked || 'demo recipient')} · confirm tester invitation` : 'Add RCS credentials, tester, and Content SID to .env'}</small></div></div><div class="readiness-row"><span class="readiness-indicator ${voiceReady ? 'ready' : ''}"></span><div><strong>Branded call</strong><small>${voiceReady ? `Configured from ${escapeHtml(config.callerMasked || 'caller')} to ${escapeHtml(config.recipientMasked || 'recipient')}` : 'Add your approved calling number and recipient to .env'}</small></div></div><p class="panel-hint">Configured means the values are present and well formed; it does not verify sender approval or handset display. See <code>PRESENTER.md</code> for setup.</p></section>

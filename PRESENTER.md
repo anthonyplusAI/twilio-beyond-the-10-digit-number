@@ -8,9 +8,11 @@ Run the local server:
 
     npm run dev
 
+Use this command so Node loads the values in `.env`. Starting `node server/index.mjs` directly leaves the live RCS and call buttons unavailable unless those values are already in the shell environment.
+
 Open the **Presenter** URL printed in the terminal. Its fragment contains a session token, so keep that tab private. Click **Open audience window** and share only that window. The audience starts at /bank; **Show architecture** changes the same shared window to /architecture. The prominent next step ends at **Story complete**. Use **Restart story** in the current step box to begin again at any point; this clears the local story and returns the audience to the bank view, but does not cancel a message or call already placed.
 
-Green **Real phone** buttons make live Twilio requests. After an accepted live message or call request, the step box turns green and prompts you to check your actual phone. Preview buttons change only the illustrated phone. API acceptance does not guarantee handset delivery or a human answer. [Message statuses](https://www.twilio.com/docs/messaging/api/message-resource) · [Call statuses](https://www.twilio.com/docs/voice/api/call-resource)
+At step **05/09**, the current step box turns green before **Send live RCS**; at **07/09**, it does the same before **Place live call**. Those green **Real phone** buttons unlock only at their matching step. The detailed runbook labels future live buttons with their unlock step. After an accepted live request, the cue changes to **Check your phone now**. Preview buttons change only the illustrated phone. API acceptance does not guarantee handset delivery or a human answer. [Message statuses](https://www.twilio.com/docs/messaging/api/message-resource) · [Call statuses](https://www.twilio.com/docs/voice/api/call-resource)
 
 The banking app and iPhone/Android phone illustrations are simulations. If you also share your own handset, identify it as the live device. The demo never captures your phone.
 

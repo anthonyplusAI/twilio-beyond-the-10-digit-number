@@ -278,6 +278,8 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px soli
 .call-preview-copy strong { font-size: 12px; }
 .call-preview-copy small { color: var(--muted); font-size: 11px; line-height: 1.4; }
 .action-button { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; text-align: left; padding: 9px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-raised); color: var(--text); font-size: 12px; font-weight: 700; cursor: pointer; transition: border-color 130ms, background 130ms; }
+.action-button-label { display: grid; gap: 3px; min-width: 0; }
+.action-button-label small { font-size: 10px; font-weight: 600; line-height: 1.25; }
 .action-button:hover:not(:disabled) { border-color: var(--blue); background: var(--blue-soft); }
 .action-button.action-primary { background: var(--red); border-color: var(--red); color: #fff; }
 .action-button.action-primary:hover:not(:disabled) { background: var(--red-hover); border-color: var(--red-hover); }
@@ -286,9 +288,12 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px soli
 .action-button:disabled { opacity: 0.46; cursor: not-allowed; }
 .action-button.action-primary:disabled { opacity: 0.75; }
 .action-button.action-live:disabled { border-color: var(--line); background: var(--surface-raised); color: var(--muted); opacity: 0.46; }
+.action-button.action-future:disabled { border-color: var(--success-line); border-style: dashed; background: var(--success-soft); color: var(--success-text); opacity: 1; }
+.action-button.action-unavailable:disabled { color: var(--muted); opacity: 0.85; }
 .action-kind { flex: none; padding: 3px 6px; border: 1px solid currentColor; border-radius: 4px; font-size: 9px; line-height: 1; white-space: nowrap; }
 .action-live .action-kind { background: rgb(255 255 255 / 14%); }
 .action-live:disabled .action-kind { background: none; }
+.action-future:disabled .action-kind { background: var(--success-inset); }
 .action-kind-sim { opacity: 0.72; }
 .action-pending { cursor: wait; }
 .control-group-tools .action-stack + .action-stack { margin-top: 9px; }

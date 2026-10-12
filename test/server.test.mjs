@@ -504,6 +504,104 @@ test('simulated fraud alert journey advances only on explicit actions and reset 
   });
 });
 
+test('authenticated presenter can show technical notes after the story and return to other audience views', async () => {
+  await withServer(async (base) => {
+    await toCallPreview(base);
+    assert.equal((await action(base, 'confirmPurchase')).body.state.step, 'reached');
+
+    const unauthorized = await fetch(`${base}/api/action`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'showTechnicalNotes' }),
+    });
+    assert.equal(unauthorized.status, 401);
+    assert.equal((await snapshot(base)).state.audienceView, 'bank');
+
+    let result = await action(base, 'showTechnicalNotes');
+    assert.equal(result.status, 200);
+    assert.equal(result.body.state.audienceView, 'technicalNotes');
+    assert.equal(result.body.state.step, 'reached');
+    assert.equal(result.body.state.chargeDecision, 'recognized');
+    assert.equal((await snapshot(base)).state.audienceView, 'technicalNotes');
+
+    result = await action(base, 'showArchitecture');
+    assert.equal(result.body.state.audienceView, 'architecture');
+    result = await action(base, 'showTechnicalNotes');
+    assert.equal(result.body.state.audienceView, 'technicalNotes');
+    result = await action(base, 'showBank');
+    assert.equal(result.body.state.audienceView, 'bank');
+    result = await action(base, 'showTechnicalNotes');
+    assert.equal(result.body.state.audienceView, 'technicalNotes');
+    result = await action(base, 'reset');
+    assert.equal(result.body.state.audienceView, 'bank');
+    assert.equal(result.body.state.step, 'idle');
+  });
+});
+
+test('reselecting an audience view increments its revision and broadcasts every presenter command', { timeout: 5_000 }, async () => {
+  await withServer(async (base) => {
+    const stream = await fetch(`${base}/api/events`);
+    const reader = stream.body.getReader();
+    const decoder = new TextDecoder();
+    let buffered = '';
+    const nextStreamState = async () => {
+      while (true) {
+        const end = buffered.indexOf('\n\n');
+        if (end !== -1) {
+          const frame = buffered.slice(0, end);
+          buffered = buffered.slice(end + 2);
+          const data = frame.split('\n').find((line) => line.startsWith('data: '));
+          if (data) return JSON.parse(data.slice(6)).state;
+        } else {
+          const chunk = await reader.read();
+          assert.equal(chunk.done, false);
+          buffered += decoder.decode(chunk.value, { stream: true });
+        }
+      }
+    };
+    try {
+      assert.equal((await nextStreamState()).audienceViewRevision, 0);
+      for (const [name, view, revision] of [
+        ['showArchitecture', 'architecture', 1],
+        ['showArchitecture', 'architecture', 2],
+        ['showTechnicalNotes', 'technicalNotes', 3],
+        ['showTechnicalNotes', 'technicalNotes', 4],
+        ['showBank', 'bank', 5],
+        ['showBank', 'bank', 6],
+      ]) {
+        const response = await action(base, name);
+        assert.equal(response.status, 200);
+        assert.equal(response.body.state.audienceView, view);
+        assert.equal(response.body.state.audienceViewRevision, revision);
+        const pushed = await nextStreamState();
+        assert.equal(pushed.audienceView, view);
+        assert.equal(pushed.audienceViewRevision, revision);
+      }
+      const reset = await action(base, 'reset');
+      assert.equal(reset.body.state.audienceView, 'bank');
+      assert.equal(reset.body.state.audienceViewRevision, 7);
+      assert.equal((await nextStreamState()).audienceViewRevision, 7);
+    } finally {
+      await reader.cancel();
+    }
+  });
+});
+
+test('reset reasserts the bank view even when the server already selected bank', async () => {
+  await withServer(async (base) => {
+    assert.equal((await snapshot(base)).state.audienceViewRevision, 0);
+
+    let response = await action(base, 'reset');
+    assert.equal(response.status, 200);
+    assert.equal(response.body.state.step, 'idle');
+    assert.equal(response.body.state.audienceView, 'bank');
+    assert.equal(response.body.state.audienceViewRevision, 1);
+
+    response = await action(base, 'reset');
+    assert.equal(response.body.state.audienceViewRevision, 2);
+  });
+});
+
 test('presenter can preview a recognized charge without claiming it came from live speech', async () => {
   await withServer(async (base) => {
     await toCallPreview(base);

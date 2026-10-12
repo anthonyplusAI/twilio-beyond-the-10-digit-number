@@ -29,7 +29,7 @@ const STEP_ACTIONS = {
   confirmPurchase: 'brandedRinging',
   reportUnrecognized: 'brandedRinging',
 };
-const ALWAYS_ACTIONS = new Set(['showArchitecture', 'showBank', 'refreshStatuses', 'reset']);
+const ALWAYS_ACTIONS = new Set(['showArchitecture', 'showTechnicalNotes', 'showBank', 'refreshStatuses', 'reset']);
 const CALL_PREVIEW_ACTIONS = new Set(['showAndroidReasonExample', 'showIphoneCallExample']);
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -81,6 +81,7 @@ function freshState() {
   return {
     step: 'idle',
     audienceView: 'bank',
+    audienceViewRevision: 0,
     messageMode: 'none',
     messageChannel: 'none',
     callMode: 'none',
@@ -324,9 +325,11 @@ function createDemo(env, fetchImpl, broadcast) {
         case 'showIphoneCallExample':
           return state.callPreviewDevice === 'iphone' ? snapshot() : publish({ callPreviewDevice: 'iphone' });
         case 'showArchitecture':
-          return state.audienceView === 'architecture' ? snapshot() : publish({ audienceView: 'architecture' });
+          return publish({ audienceView: 'architecture', audienceViewRevision: state.audienceViewRevision + 1 });
+        case 'showTechnicalNotes':
+          return publish({ audienceView: 'technicalNotes', audienceViewRevision: state.audienceViewRevision + 1 });
         case 'showBank':
-          return state.audienceView === 'bank' ? snapshot() : publish({ audienceView: 'bank' });
+          return publish({ audienceView: 'bank', audienceViewRevision: state.audienceViewRevision + 1 });
         case 'refreshStatuses': {
           const checks = [];
           if (state.messageMode === 'live' && state.messageSid) {
@@ -386,7 +389,7 @@ function createDemo(env, fetchImpl, broadcast) {
           return snapshot();
         }
         case 'reset':
-          state = freshState();
+          state = { ...freshState(), audienceViewRevision: state.audienceViewRevision + 1 };
           sequence = 0;
           broadcast(snapshot());
           return snapshot();
@@ -478,7 +481,7 @@ async function serveStatic(req, res, pathname, publicDir) {
     json(res, 400, { error: 'Invalid URL.', code: 'INVALID_URL' });
     return;
   }
-  const routeFile = ['/bank', '/presenter', '/architecture'].includes(decoded) ? 'index.html' : decoded.slice(1);
+  const routeFile = ['/bank', '/presenter', '/architecture', '/architecture/details'].includes(decoded) ? 'index.html' : decoded.slice(1);
   const segments = routeFile.split('/');
   if (!routeFile || routeFile.includes('\0') || routeFile.includes('\\') || segments.some((segment) => segment.startsWith('.'))) {
     json(res, 404, { error: 'Not found.', code: 'NOT_FOUND' });

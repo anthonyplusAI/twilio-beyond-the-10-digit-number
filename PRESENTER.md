@@ -4,15 +4,16 @@ This guide covers webinar controls and optional live Twilio tests. Attendees can
 
 ## Start and share
 
-Run the local server:
+Install dependencies once, then run the local server:
 
+    npm install
     npm run dev
 
 Use this command so Node loads the values in `.env`. Starting `node server/index.mjs` directly leaves the live RCS and call buttons unavailable unless those values are already in the shell environment.
 
 Open the **Presenter** URL printed in the terminal. Its fragment contains a session token, so keep that tab private. Click **Open audience window** and share only that window. The audience starts at /bank; **Show architecture** changes the same shared window to /architecture. The prominent next step ends at **Story complete**. Use **Restart story** in the current step box to begin again at any point; this clears the local story and returns the audience to the bank view, but does not cancel a message or call already placed.
 
-At step **05/09**, the current step box turns green before **Send live RCS**; at **07/09**, it does the same before **Place live call**. Those green **Real phone** buttons unlock only at their matching step. The detailed runbook labels future live buttons with their unlock step. After an accepted live request, the cue changes to **Check your phone now**. Preview buttons change only the illustrated phone. API acceptance does not guarantee handset delivery or a human answer. [Message statuses](https://www.twilio.com/docs/messaging/api/message-resource) · [Call statuses](https://www.twilio.com/docs/voice/api/call-resource)
+At step **05/09**, the current step box turns green before **Send live RCS**; at **07/09**, it does the same before **Place live AI call** when its configuration is complete. Those green **Real phone** buttons unlock only at their matching step. The detailed runbook labels future live buttons with their unlock step. After an accepted live request, the cue changes to **Check your phone now**. Preview buttons change only the illustrated phone. API acceptance does not guarantee handset delivery or a human answer. [Message statuses](https://www.twilio.com/docs/messaging/api/message-resource) · [Call statuses](https://www.twilio.com/docs/voice/api/call-resource)
 
 The banking app and iPhone/Android phone illustrations are simulations. If you also share your own handset, identify it as the live device. The demo never captures your phone.
 
@@ -25,8 +26,8 @@ The banking app and iPhone/Android phone illustrations are simulations. If you a
 | Rewind | Same transaction, different contact experience. |
 | Show RCS preview, or Send live rich RCS | The RCS Sender provides the brand identity; the rich card adds transaction context and reply choices. The on-screen phone remains an illustration. [RCS onboarding](https://www.twilio.com/docs/rcs/onboarding) · [Twilio card](https://www.twilio.com/docs/content/twiliocard) |
 | Mark no response | This is a presenter-selected state. An application would make its own escalation decision. |
-| Show call preview, or Place live call | The registered caller display name is **Twilio**. The supported iPhone illustration shows name and logo. [US Enhanced Branded Calling](https://www.twilio.com/docs/voice/branded-calling/us-enhanced) |
-| Show Android call reason (optional) | “Card security alert” is an illustrative reason on an Android 14+ example. The actual approved reason for this bundle is unverified. [Supported device table](https://www.twilio.com/docs/voice/branded-calling/us-enhanced) |
+| Show call preview, or Place live AI call | The registered caller display name is **Twilio**. The Android 14+ illustration shows name, logo, and an **example** call reason. The live call connects to a conversational AI agent using Twilio ConversationRelay and ElevenLabs speech. [US Enhanced Branded Calling](https://www.twilio.com/docs/voice/branded-calling/us-enhanced) · [ConversationRelay](https://www.twilio.com/docs/voice/twiml/connect/conversationrelay) |
+| Compare iPhone display (optional) | The supported iPhone illustration shows name and logo, without a call reason. The actual approved call reason for this bundle is unverified. [Supported device table](https://www.twilio.com/docs/voice/branded-calling/us-enhanced) |
 | Mark customer reached → Show architecture | Reveal the RCS-first route, text fallback, application-controlled voice step, and event log. [RCS fallback](https://www.twilio.com/docs/rcs/send-an-rcs-message) · [Calls API](https://www.twilio.com/docs/voice/api/call-resource) |
 
 The Twilio Bank account, merchant, charge, and illustrated phone screens are fictional. Anthony Dellavecchia is the named customer character in the story. **Show RCS preview** and **Show call preview** never contact a phone.
@@ -52,19 +53,24 @@ The square logo uses the Twilio Bug; the banner is branded for the fictional Twi
 
 The sample template has a twilio/card type for RCS and a twilio/text type for fallback. Twilio can attempt RCS first and fall back to SMS or MMS when the Messaging Service has suitable senders in its pool. The architecture screen illustrates that production path. For an unapproved sender, use the accepted tester; do not count on an uninvited device to demonstrate fallback. [RCS sending and fallback](https://www.twilio.com/docs/rcs/send-an-rcs-message) · [RCS onboarding](https://www.twilio.com/docs/rcs/onboarding)
 
-The app does not receive inbound message webhooks. Tapping a quick reply on a real phone does not advance the bank story; use the presenter controls for the narrative. Handling replies would require an inbound [Messaging webhook](https://www.twilio.com/docs/messaging/guides/webhook-request). No public tunnel is needed for the current outbound demo; the logo, banner, and card image need public HTTPS URLs.
+The app does not receive inbound message webhooks. Tapping a quick reply on a real phone does not advance the bank story; use the presenter controls for the narrative. Handling replies would require an inbound [Messaging webhook](https://www.twilio.com/docs/messaging/guides/webhook-request). RCS sending needs no tunnel; the logo, banner, and card image need public HTTPS URLs. The live AI call does need a public WSS tunnel for ConversationRelay. [ConversationRelay onboarding](https://www.twilio.com/docs/voice/conversationrelay/onboarding)
 
-## Optional: place a real branded call
+## Optional: place a real branded AI call
 
-Set TWILIO_VOICE_FROM in .env to your number assigned to an approved US Enhanced Branded Calling bundle. Set DEMO_TO_NUMBER to your own test phone, restart the server, and use the new private Presenter URL. **Place live call from approved number** makes one outbound [Calls API](https://www.twilio.com/docs/voice/api/call-resource) request. The spoken script explicitly identifies the call as a Twilio demonstration for a fictional bank scenario.
+The live call now uses an AI agent. Twilio ConversationRelay transcribes your speech, sends text to this application's WebSocket, and speaks its replies through ElevenLabs. The app uses OpenAI to generate answers, so it needs an OpenAI API key. A separate ElevenLabs API key is not used because the voice is selected in ConversationRelay. [ConversationRelay](https://www.twilio.com/docs/voice/twiml/connect/conversationrelay) · [Voice selection](https://www.twilio.com/docs/voice/conversationrelay/voice-configuration) · [Twilio's OpenAI integration walkthrough](https://www.twilio.com/en-us/blog/developers/tutorials/product/integrate-openai-twilio-voice-using-conversationrelay)
 
-Your approved display name is **Twilio**, not Twilio Bank. Twilio’s [US Enhanced guide](https://www.twilio.com/docs/voice/branded-calling/us-enhanced) lists Samsung support at Android 14 or later. Your Samsung Android 13 is outside that documented range, so the actual call may display as an ordinary number. Twilio lists name, logo, and call reason for supported Android devices; its T-Mobile and Verizon iPhone entries list name and logo. “Card security alert” is only a possible registered reason in this illustration; this application does not set a reason through the outbound call request. [US Enhanced guide and device table](https://www.twilio.com/docs/voice/branded-calling/us-enhanced)
+1. In Twilio Console, accept the **Predictive and Generative AI/ML Features Addendum** for Voice. [Onboarding guide](https://www.twilio.com/docs/voice/conversationrelay/onboarding)
+2. Set `TWILIO_VOICE_FROM` in `.env` to the number assigned to your approved US Enhanced Branded Calling bundle. Keep `DEMO_TO_NUMBER` as your own test phone. Set `OPENAI_API_KEY` to your API key. `OPENAI_MODEL` defaults to `gpt-4o-mini`. To select and tune an ElevenLabs voice, copy its ID and optional model/speed settings from [Twilio's voice guide](https://www.twilio.com/docs/voice/conversationrelay/voice-configuration) into `TWILIO_ELEVENLABS_VOICE_ID`; otherwise the app uses Twilio's documented US English default.
+3. Start a tunnel to the **dedicated voice port**: `ngrok http 3401`. Copy its public HTTPS host and set `TWILIO_CONVERSATION_RELAY_URL=wss://YOUR-NGROK-HOST/voice-relay` in `.env`. This URL must use `wss://`; the local presenter site stays on its separate port. [ConversationRelay URL requirement and signature validation](https://www.twilio.com/docs/voice/conversationrelay/onboarding)
+4. Restart `npm run dev` and open the new private Presenter URL. At step **07/09**, click **Place live AI call**, then answer your phone. The Twilio Bank virtual assistant asks whether Anthony made the vehicle deposit. Try responding **“No, I didn't. What happens next?”** and ask one follow-up question. ConversationRelay passes each spoken turn to the app and speaks the AI's reply. Tell the webinar audience that Twilio Bank is fictional before this scene. [WebSocket message flow](https://www.twilio.com/docs/voice/conversationrelay/websocket-messages)
+
+Your approved display name is **Twilio**, not Twilio Bank. Your test phone displayed **Twilio Inc**; carrier and device presentation can vary. Twilio’s [US Enhanced guide](https://www.twilio.com/docs/voice/branded-calling/us-enhanced) lists Samsung support at Android 14 or later. Your Samsung Android 13 is outside that documented range, so a missing logo or call reason is plausible. Twilio lists name, logo, and call reason for supported Android devices; its listed iPhone entries have name and logo. “Card security alert” is an **illustrative** reason in the Android 14+ phone simulation; this application does not set a call reason in the outbound API request. [US Enhanced guide and device table](https://www.twilio.com/docs/voice/branded-calling/us-enhanced)
 
 Use **Mark customer reached** only when that fits the story. A completed Call resource status can include voicemail or an IVR, so the API result alone does not establish that Anthony answered. [Call status reference](https://www.twilio.com/docs/voice/api/call-resource)
 
 ## Local operation
 
-- The server binds to 127.0.0.1 and keeps the Twilio auth token server-side. Browser state contains only readiness flags and masked phone numbers.
+- Both local servers bind to 127.0.0.1. Tunnel only the dedicated voice port; keep the presenter site local. The WebSocket validates Twilio's handshake signature. Browser state contains only readiness flags and masked phone numbers. [ConversationRelay WebSocket security](https://www.twilio.com/docs/voice/conversationrelay/onboarding)
 - The fixed DEMO_TO_NUMBER is the only destination for real sends and calls; the presenter UI cannot change it.
 - The presenter session token changes on server restart. Story state stays in memory and resets on restart or **Reset story**.
 - Apple Messages for Business is outside this sample app while the separate webinar demo material is being prepared.

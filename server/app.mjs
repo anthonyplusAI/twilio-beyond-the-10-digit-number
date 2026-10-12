@@ -3,6 +3,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { dirname, extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRelayTwiml, isValidElevenLabsVoiceId, isValidRelayUrl } from './voice-agent.mjs';
 
 const moduleDir = dirname(fileURLToPath(import.meta.url));
 const defaultPublicDir = resolve(moduleDir, '../public');
@@ -42,8 +43,6 @@ const MIME = {
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
 };
-const VOICE_TWIML = '<Response><Say>This is a Twilio demonstration call for a fictional Twilio Bank scenario. Anthony Dellavecchia, a nine thousand eight hundred dollar vehicle deposit at Midlife Crisis Motors on card ending four eight two nine was flagged. Please review the transaction in your official banking app. Goodbye.</Say></Response>';
-
 class AppError extends Error {
   constructor(status, code, message) {
     super(message);
@@ -63,10 +62,13 @@ function getConfig(env) {
   const serviceValid = SID.service.test(env.TWILIO_MESSAGING_SERVICE_SID ?? '');
   const contentValid = SID.content.test(env.TWILIO_RCS_CONTENT_SID ?? '');
   const callerValid = E164.test(env.TWILIO_VOICE_FROM ?? '');
+  const relayValid = isValidRelayUrl(env.TWILIO_CONVERSATION_RELAY_URL);
+  const openAiValid = Boolean(env.OPENAI_API_KEY?.trim());
+  const voiceIdValid = isValidElevenLabsVoiceId(env.TWILIO_ELEVENLABS_VOICE_ID);
 
   return {
     rcsReady: accountValid && tokenValid && recipientValid && serviceValid && contentValid,
-    voiceReady: accountValid && tokenValid && recipientValid && callerValid,
+    voiceReady: accountValid && tokenValid && recipientValid && callerValid && relayValid && openAiValid && voiceIdValid,
     recipientMasked: maskNumber(env.DEMO_TO_NUMBER),
     callerMasked: maskNumber(env.TWILIO_VOICE_FROM),
     contentSidConfigured: contentValid,
@@ -140,7 +142,8 @@ function createTwilioClient(env, fetchImpl) {
       const result = await request('Calls.json', 'POST', {
         To: env.DEMO_TO_NUMBER,
         From: env.TWILIO_VOICE_FROM,
-        Twiml: VOICE_TWIML,
+        Twiml: createRelayTwiml(env),
+        TimeLimit: '180',
       }, 'TWILIO_CALL_REJECTED');
       if (!SID.call.test(result?.sid ?? '')) {
         throw new AppError(502, 'TWILIO_CALL_REJECTED', 'Twilio did not return a valid Call SID. Check Twilio Console before retrying.');
@@ -265,20 +268,20 @@ function createDemo(env, fetchImpl, broadcast) {
             detail: 'Presenter advances this story step manually.',
           });
         case 'previewBrandedCall':
-          return publish({ step: 'brandedRinging', callMode: 'simulated', callPreviewDevice: 'iphone' }, {
+          return publish({ step: 'brandedRinging', callMode: 'simulated', callPreviewDevice: 'android' }, {
             kind: 'simulated',
             title: 'Branded call previewed',
-            detail: 'On-screen iPhone call is a simulation; no call was placed.',
+            detail: 'On-screen Android 14+ call with a reason is a simulation; no call was placed.',
           });
         case 'placeCall': {
           if (!config.voiceReady) {
-            throw new AppError(503, 'VOICE_NOT_CONFIGURED', 'Configure a valid Twilio account, demo recipient, and approved caller number before placing a call.');
+            throw new AppError(503, 'VOICE_NOT_CONFIGURED', 'Configure Twilio calling, an OpenAI API key, and a public ConversationRelay WebSocket URL before placing a call.');
           }
           const result = await twilio.placeCall();
           return publish({
             step: 'brandedRinging',
             callMode: 'live',
-            callPreviewDevice: 'iphone',
+            callPreviewDevice: 'android',
             callSid: result.sid,
             callStatus: typeof result.status === 'string' ? result.status : null,
           }, {

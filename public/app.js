@@ -11,6 +11,7 @@ const SOURCES = {
   rcsSend: 'https://www.twilio.com/docs/rcs/send-an-rcs-message',
   card: 'https://www.twilio.com/docs/content/twiliocard',
   calls: 'https://www.twilio.com/docs/voice/api/call-resource',
+  relay: 'https://www.twilio.com/docs/voice/conversationrelay',
   branded: 'https://www.twilio.com/docs/voice/branded-calling/us-enhanced',
 };
 
@@ -21,9 +22,9 @@ const SCENES = {
   unknownMissed: { chapter: 'Attempt 1 · Missed', caption: 'Anthony ignores the call, and the charge remains unconfirmed.', short: 'Call ignored', cue: 'This is the cost of low trust: an important alert is still unresolved.' },
   rewound: { chapter: 'Replay · Same purchase', caption: 'The event is the same. The communication experience changes.', short: 'Ready for trusted outreach', cue: 'Rewind to the same purchase. Show how a recognizable message can carry context before a follow-up call.' },
   rcsSent: { chapter: 'Attempt 2 · Rich message', caption: 'The illustrated phone shows purchase details in a branded message.', short: 'RCS alert shown', cue: 'If configured, this action sent a real rich-card request to an invited RCS tester. Confirm delivery on your actual handset. The iPhone view is illustrative.' },
-  noResponse: { chapter: 'Attempt 2 · No response', caption: 'No reply arrives, so the application escalates the outreach.', short: 'No response', cue: 'No response is a presenter-selected state here. In an app, you would use your own timing and event logic to decide when to call.' },
-  brandedRinging: { chapter: 'Attempt 2 · Branded call', caption: 'A follow-up call identifies the registered business.', short: 'Branded call ringing', cue: 'The approved caller name is Twilio. The iPhone shows name and logo; switch to the Android 14+ example to illustrate where a call reason can appear.' },
-  reached: { chapter: 'The outcome · Contact made', caption: 'Anthony can now review the charge with the bank.', short: 'Customer reached', cue: 'We have improved the chance to connect. Marking reached is a story action, not proof derived from a Twilio call status.' },
+  noResponse: { chapter: 'Attempt 2 · No response', caption: 'No reply arrives, so the application escalates the outreach.', short: 'No response', cue: 'No response is a presenter-selected state here. Next, place the branded AI agent call. In an app, your timing and event logic would decide when to call.' },
+  brandedRinging: { chapter: 'Attempt 2 · Branded call', caption: 'A follow-up call identifies the registered business.', short: 'Branded call ringing', cue: 'Answer the live call and speak with the AI agent. Your real Android 13 handset is outside Twilio’s documented support for logo and call reason; show what actually appears on it.' },
+  reached: { chapter: 'The outcome · Contact made', caption: 'Anthony can now review the charge in a conversation.', short: 'Customer reached', cue: 'If the live AI call connected, recap the conversation. For a preview, describe the intended exchange. Marking reached is a story action, not proof derived from a Twilio call status.' },
 };
 
 let snapshot = null;
@@ -102,13 +103,13 @@ function sceneFor(state) {
       return {
         ...scene,
         short: 'Android call-reason example',
-        caption: 'A supported Android 14+ device can show the registered call reason with the name and logo.',
-        cue: '“Card security alert” is an illustrative reason; the approved reason on your actual bundle is unverified. This Android phone is simulated. Twilio documents call reasons on supported Android 14+ devices.',
+        caption: 'This illustrated Android 14+ call shows where a registered reason can appear with the name and logo.',
+        cue: `${state.callMode === 'live' ? 'Answer your real handset and ask the AI agent about the charge. ' : 'This is a preview; no call was placed. '}Point to “Card security alert” on the simulated Android 14+ phone. It is an example, not a confirmed reason in your approved bundle.`,
       };
     }
     return state.callMode === 'live'
-      ? { ...scene, short: 'Call request accepted', caption: 'Twilio accepted the outbound call. The iPhone view illustrates supported display.', cue: 'Twilio accepted the outbound call request. Watch your actual handset for the call. The approved caller name is Twilio; the audience iPhone is a simulation.' }
-      : { ...scene, short: 'Branded call preview', cue: 'This is a preview. No call was placed. The iPhone illustrates how the approved Twilio identity can appear on a supported device.' };
+      ? { ...scene, short: 'iPhone display comparison', caption: 'This illustrated iPhone shows name and logo, the elements Twilio lists for supported iPhones.', cue: 'Watch your actual handset for the call. This iPhone is a simulated comparison; Twilio lists name and logo for supported iPhones, and not a call reason. Switch back to the Android 14+ example to show a reason.' }
+      : { ...scene, short: 'iPhone display comparison', caption: 'This illustrated iPhone shows name and logo, the elements Twilio lists for supported iPhones.', cue: 'This is a preview. No call was placed. Twilio lists name and logo for supported iPhones, and not a call reason. Switch back to the Android 14+ example to show a reason.' };
   }
   return scene;
 }
@@ -118,7 +119,7 @@ function phoneCueFor(state, config) {
     return { key: 'ready:rcs', label: 'Real phone step', detail: pendingAction === 'sendRcs' ? 'Sending the fraud alert to your test phone…' : 'Click Send live RCS to send the fraud alert to your test phone.' };
   }
   if (presenterToken && state.step === 'noResponse' && config.voiceReady) {
-    return { key: 'ready:call', label: 'Real phone step', detail: pendingAction === 'placeCall' ? 'Placing the call to your test phone…' : 'Click Place live call to ring your test phone from the approved number.' };
+    return { key: 'ready:call', label: 'Real phone step', detail: pendingAction === 'placeCall' ? 'Placing the AI agent call to your test phone…' : 'Click Place AI agent call, then answer your phone and speak with the agent.' };
   }
   if (state.step === 'rcsSent' && state.messageMode === 'live') {
     if (['failed', 'undelivered', 'canceled'].includes(String(state.messageStatus || '').toLowerCase())) return null;
@@ -131,7 +132,7 @@ function phoneCueFor(state, config) {
   }
   if (state.step === 'brandedRinging' && state.callMode === 'live') {
     if (['completed', 'failed', 'busy', 'no-answer', 'canceled'].includes(String(state.callStatus || '').toLowerCase())) return null;
-    return { key: `call:${state.callSid || 'pending'}`, label: 'Check your phone now', detail: 'Watch your test handset for the incoming call. Twilio accepted the request; caller display and answer are not confirmed.' };
+    return { key: `call:${state.callSid || 'pending'}`, label: 'Answer and speak', detail: 'Answer the incoming call on your test phone and speak with the AI agent. The illustrated Android call reason may differ from your handset.' };
   }
   return null;
 }
@@ -273,8 +274,9 @@ function renderArchitecture(state) {
           <div class="flow-arrow" aria-hidden="true">${icon('arrow', 25)}</div>
           <div class="flow-node flow-decision"><span class="flow-node-icon">${icon('clock', 21)}</span><small>03 · Application logic</small><h3>No response?</h3><p>Your app determines when to follow up. This step is controlled by the presenter here.</p></div>
           <div class="flow-arrow" aria-hidden="true">${icon('arrow', 25)}</div>
-          <div class="flow-node flow-voice"><span class="flow-node-icon">${icon('phone', 21)}</span><small>04 · Voice + approved number</small><h3>Call from Twilio</h3><p>The real registered caller name is “Twilio.” Display depends on carrier and device.</p></div>
+          <div class="flow-node flow-voice"><span class="flow-node-icon">${icon('phone', 21)}</span><small>04 · Voice + approved number</small><h3>Branded AI call</h3><p>The registered caller name is “Twilio.” Anthony can speak with the agent when he answers.</p></div>
         </div>
+        <div class="voice-agent-path" aria-label="Answered call conversation path"><div class="voice-agent-path-heading"><strong>Once Anthony answers</strong><a href="${SOURCES.relay}" target="_blank" rel="noopener noreferrer">Conversation Relay docs ${icon('external', 13)}</a></div><div class="voice-agent-steps"><div class="voice-agent-step"><strong>Twilio Conversation Relay</strong><span>Deepgram transcribes · ElevenLabs speaks</span></div><span class="voice-agent-arrow" aria-hidden="true">↔</span><div class="voice-agent-step"><strong>Local AI agent</strong><span>Exchanges text over a WebSocket</span></div><span class="voice-agent-arrow" aria-hidden="true">↔</span><div class="voice-agent-step"><strong>OpenAI</strong><span>Generates a contextual reply</span></div></div></div>
         <div class="flow-note"><span>${icon('shield', 16)} Sender identity is established separately for each channel.</span><a href="${SOURCES.rcsSend}" target="_blank" rel="noopener noreferrer">Twilio routing docs ${icon('external', 14)}</a></div>
       </section>
       <section class="identity-section" aria-label="Identity setup"><div class="section-header"><div><h2>Where identity is established</h2><p>Registrations that support the experience shown above</p></div></div><div class="identity-grid">
@@ -282,15 +284,18 @@ function renderArchitecture(state) {
         <div class="identity-item"><div class="identity-number">02</div><div><h3>RCS sender</h3><p>A sender can message invited testers while approval is pending.</p><a href="${SOURCES.rcsOnboarding}" target="_blank" rel="noopener noreferrer">RCS onboarding ${icon('external', 13)}</a></div></div>
         <div class="identity-item"><div class="identity-number">03</div><div><h3>Branded Calling</h3><p>The approved number uses “Twilio.” Logo and call reason depend on handset support.</p><a href="${SOURCES.branded}" target="_blank" rel="noopener noreferrer">US Enhanced guide ${icon('external', 13)}</a></div></div>
       </div></section>
-      <section class="api-section" aria-label="API requests"><div class="section-header"><div><h2>What the application sends</h2><p>Two API calls, with the recipient fixed in the local server configuration</p></div></div><div class="api-grid"><article class="api-call"><div class="api-call-header"><span>${icon('message', 17)} Rich alert</span><a href="${SOURCES.rcsSend}" target="_blank" rel="noopener noreferrer">Twilio docs ${icon('external', 13)}</a></div><pre><code>POST /2010-04-01/Accounts/{AccountSid}/Messages.json
+      <section class="api-section" aria-label="API requests"><div class="section-header"><div><h2>What the application sends</h2><p>Two outbound Twilio POST requests; then a WebSocket conversation and OpenAI requests</p></div></div><div class="api-grid"><article class="api-call"><div class="api-call-header"><span>${icon('message', 17)} Rich alert</span><a href="${SOURCES.rcsSend}" target="_blank" rel="noopener noreferrer">Twilio docs ${icon('external', 13)}</a></div><pre><code>POST /2010-04-01/Accounts/{AccountSid}/Messages.json
 To=DEMO_TO_NUMBER
 MessagingServiceSid=MG…
 ContentSid=HX…</code></pre></article><article class="api-call"><div class="api-call-header"><span>${icon('phone', 17)} Follow-up call</span><a href="${SOURCES.calls}" target="_blank" rel="noopener noreferrer">Twilio docs ${icon('external', 13)}</a></div><pre><code>POST /2010-04-01/Accounts/{AccountSid}/Calls.json
 To=DEMO_TO_NUMBER
 From=APPROVED_NUMBER
-Twiml=&lt;Response&gt;…&lt;/Response&gt;</code></pre></article></div><p class="api-section-note">The Messaging Service selects RCS or a configured SMS sender. The decision to call after no reply belongs to your application.</p></section>
+Twiml=&lt;Response&gt;&lt;Connect&gt;
+  &lt;ConversationRelay url="wss://…"
+    ttsProvider="ElevenLabs" /&gt;
+&lt;/Connect&gt;&lt;/Response&gt;</code></pre></article></div><p class="api-section-note">The Messaging Service selects RCS or a configured SMS sender. Your app decides when to call; the agent server sends reply text back to Conversation Relay.</p></section>
       <section class="event-section" aria-label="Demo event log"><div class="section-header"><div><h2>What happened in this run</h2><p>Live API actions and story simulations are labeled separately.</p></div><span class="event-count">${state.events.length} events</span></div>${renderEventLog(state.events)}</section>
-      <p class="architecture-disclaimer">The Twilio Bank account, Midlife Crisis Motors charge, and phone screens are fictional. A request accepted by the API is not proof of handset delivery or a human answering. <a href="${SOURCES.calls}" target="_blank" rel="noopener noreferrer">Calls API</a> · <a href="${SOURCES.rcsTutorial}" target="_blank" rel="noopener noreferrer">RCS tester walkthrough</a></p>
+      <p class="architecture-disclaimer">The Twilio Bank account, Midlife Crisis Motors charge, and phone screens are fictional. A request accepted by the API is not proof of handset delivery or a human answering. <a href="${SOURCES.calls}" target="_blank" rel="noopener noreferrer">Calls API</a> · <a href="${SOURCES.relay}" target="_blank" rel="noopener noreferrer">Conversation Relay</a> · <a href="${SOURCES.rcsTutorial}" target="_blank" rel="noopener noreferrer">RCS tester walkthrough</a></p>
     </main>
   </div>`;
 }
@@ -325,10 +330,10 @@ function renderNextActions(state, config) {
     case 'unknownMissed': return presenterButton('rewind', 'Rewind', { primary: true });
     case 'rewound': return `${presenterButton('sendRcs', 'Send live RCS', { primary: config.rcsReady, disabled: !config.rcsReady, live: true, unavailable: !config.rcsReady && 'Configure RCS to enable' })}${presenterButton('previewRcs', 'Show RCS preview', { primary: !config.rcsReady })}`;
     case 'rcsSent': return presenterButton('markNoResponse', 'Mark no response', { primary: true });
-    case 'noResponse': return `${presenterButton('placeCall', 'Place live call', { primary: config.voiceReady, disabled: !config.voiceReady, live: true, unavailable: !config.voiceReady && 'Configure calling to enable' })}${presenterButton('previewBrandedCall', 'Show call preview', { primary: !config.voiceReady })}`;
+    case 'noResponse': return `${presenterButton('placeCall', 'Place AI agent call', { primary: config.voiceReady, disabled: !config.voiceReady, live: true, unavailable: !config.voiceReady && 'Configure AI call to enable' })}${presenterButton('previewBrandedCall', 'Show call preview', { primary: !config.voiceReady })}`;
     case 'brandedRinging': return `${presenterButton('markReached', 'Mark customer reached', { primary: true })}${state.callPreviewDevice === 'android'
       ? presenterButton('showIphoneCallExample', 'Compare iPhone display', { simulated: true })
-      : presenterButton('showAndroidReasonExample', 'Show Android call reason', { simulated: true })}`;
+      : presenterButton('showAndroidReasonExample', 'Return to Android reason', { simulated: true })}`;
     case 'reached': return state.audienceView === 'architecture'
       ? `<span class="story-complete" role="status">${icon('check', 17)} Story complete</span>`
       : presenterButton('showArchitecture', 'Show architecture', { primary: true });
@@ -368,17 +373,17 @@ function renderPresenter(state, config, phoneCue) {
           ${presenterButton('rewind', 'Rewind to the same charge', { disabled: step !== 'unknownMissed', primary: step === 'unknownMissed', simulated: true })}
           <div class="action-stack two-up">${presenterButton('sendRcs', 'Send live rich RCS', { disabled: !canRcs || !rcsReady, primary: canRcs && rcsReady, live: true, futureStep: rcsFutureStep, unavailable: !rcsReady && 'Configure RCS to enable' })}${presenterButton('previewRcs', 'Show RCS preview', { disabled: !canRcs, primary: canRcs && !rcsReady, simulated: true })}</div>
           ${presenterButton('markNoResponse', 'Mark no response', { disabled: step !== 'rcsSent', primary: step === 'rcsSent', simulated: true })}
-          <div class="action-stack two-up">${presenterButton('placeCall', 'Place live call from approved number', { disabled: !canCall || !voiceReady, primary: canCall && voiceReady, live: true, futureStep: callFutureStep, unavailable: !voiceReady && 'Configure calling to enable' })}${presenterButton('previewBrandedCall', 'Show call preview', { disabled: !canCall, primary: canCall && !voiceReady, simulated: true })}</div>
-          ${canCompareCall ? `<div class="call-preview-options"><div class="call-preview-copy"><strong>Compare supported displays</strong><small>“Card security alert” is an illustrative Android 14+ reason; your registered reason is unverified.</small></div><div class="action-stack two-up">${presenterButton('showIphoneCallExample', 'iPhone · name + logo', { disabled: state.callPreviewDevice === 'iphone', simulated: true })}${presenterButton('showAndroidReasonExample', 'Android 14+ · add reason', { disabled: state.callPreviewDevice === 'android', simulated: true })}</div></div>` : ''}
+          <div class="action-stack two-up">${presenterButton('placeCall', 'Place live AI agent call', { disabled: !canCall || !voiceReady, primary: canCall && voiceReady, live: true, futureStep: callFutureStep, unavailable: !voiceReady && 'Configure AI call to enable' })}${presenterButton('previewBrandedCall', 'Show call preview', { disabled: !canCall, primary: canCall && !voiceReady, simulated: true })}</div>
+          ${canCompareCall ? `<div class="call-preview-options"><div class="call-preview-copy"><strong>Compare supported displays</strong><small>Android 14+ is the default call example. “Card security alert” is illustrative; the reason in your approved bundle is unverified.</small></div><div class="action-stack two-up">${presenterButton('showIphoneCallExample', 'iPhone · name + logo', { disabled: state.callPreviewDevice === 'iphone', simulated: true })}${presenterButton('showAndroidReasonExample', 'Android 14+ · example reason', { disabled: state.callPreviewDevice === 'android', simulated: true })}</div></div>` : ''}
           ${presenterButton('markReached', 'Mark customer reached', { disabled: step !== 'brandedRinging', primary: step === 'brandedRinging', simulated: true })}
         </div></section>
         <section class="control-group control-group-tools"><div class="group-heading"><span>04</span><div><h2>Explain the build</h2><p>Switch the shared window to the diagram and event log.</p></div></div><div class="action-stack two-up">${presenterButton('showArchitecture', 'Show architecture', { disabled: state.audienceView === 'architecture', primary: step === 'reached' && state.audienceView !== 'architecture' })}${presenterButton('showBank', 'Show bank app', { disabled: state.audienceView === 'bank' })}</div><div class="action-stack">${presenterButton('refreshStatuses', 'Refresh live statuses', { disabled: !state.messageSid && !state.callSid })}</div></section>
       </div><aside class="presenter-sidebar">
         <section class="presenter-panel"><div class="panel-title"><h2>What to say now</h2><span>${icon('message', 18)}</span></div><p class="cue-text">${escapeHtml(scene.cue)}</p></section>
-        <section class="presenter-panel"><div class="panel-title"><h2>Live setup</h2><span>${icon('shield', 18)}</span></div><div class="readiness-row"><span class="readiness-indicator ${rcsReady ? 'ready' : ''}"></span><div><strong>Rich RCS test</strong><small>${rcsReady ? `Configured for ${escapeHtml(config.recipientMasked || 'demo recipient')} · confirm tester invitation` : 'Add RCS credentials, tester, and Content SID to .env'}</small></div></div><div class="readiness-row"><span class="readiness-indicator ${voiceReady ? 'ready' : ''}"></span><div><strong>Branded call</strong><small>${voiceReady ? `Configured from ${escapeHtml(config.callerMasked || 'caller')} to ${escapeHtml(config.recipientMasked || 'recipient')}` : 'Add your approved calling number and recipient to .env'}</small></div></div><p class="panel-hint">Configured means the values are present and well formed; it does not verify sender approval or handset display. See <code>PRESENTER.md</code> for setup.</p></section>
+        <section class="presenter-panel"><div class="panel-title"><h2>Live setup</h2><span>${icon('shield', 18)}</span></div><div class="readiness-row"><span class="readiness-indicator ${rcsReady ? 'ready' : ''}"></span><div><strong>Rich RCS test</strong><small>${rcsReady ? `Configured for ${escapeHtml(config.recipientMasked || 'demo recipient')} · confirm tester invitation` : 'Add RCS credentials, tester, and Content SID to .env'}</small></div></div><div class="readiness-row"><span class="readiness-indicator ${voiceReady ? 'ready' : ''}"></span><div><strong>Branded AI agent call</strong><small>${voiceReady ? `Configured ${escapeHtml(config.callerMasked || 'caller')} → ${escapeHtml(config.recipientMasked || 'recipient')} · Relay + OpenAI` : 'Set the approved number, recipient, OPENAI_API_KEY, and public TWILIO_CONVERSATION_RELAY_URL (wss://) in .env'}</small></div></div><p class="panel-hint">Configured means values are present and well formed; it does not verify Conversation Relay onboarding, public reachability, or handset display. See <code>PRESENTER.md</code> for setup.</p></section>
         <section class="presenter-panel"><div class="panel-title"><h2>Latest API results</h2><span>${icon('activity', 18)}</span></div><dl class="result-list"><div><dt>Message SID</dt><dd>${escapeHtml(state.messageSid || '—')}</dd></div><div><dt>Message status</dt><dd>${escapeHtml(state.messageStatus || '—')}</dd></div><div><dt>Delivery channel</dt><dd>${escapeHtml(channelLabel)}</dd></div><div><dt>Call SID</dt><dd>${escapeHtml(state.callSid || '—')}</dd></div><div><dt>Call status</dt><dd>${escapeHtml(state.callStatus || '—')}</dd></div></dl><p class="panel-hint">“Accepted” confirms an API request, not delivery. A completed call does not prove a person answered.</p></section>
         <section class="presenter-panel presenter-event-panel"><div class="panel-title"><h2>Recent events</h2><span class="event-count">${state.events.length}</span></div>${renderEventLog(state.events, 5)}</section>
-        <details class="presenter-notes"><summary>Device and channel notes</summary><p>Your Samsung Android 13 is outside Twilio’s documented Samsung Android 14+ support for US Enhanced Branded Calling. The iPhone and Android 14+ views are simulations. The approved caller name is “Twilio”; “Card security alert” illustrates a possible call reason and is not confirmed as the reason in your bundle. Twilio lists call-reason display on supported Android devices, while its iPhone entries list name and logo only.</p><p>Before RCS approval, send only to a tester who accepted the sender invitation. The SMS branch is illustrated, not sent as part of this rehearsal.</p><div><a href="${SOURCES.branded}" target="_blank" rel="noopener noreferrer">Calling guide ${icon('external', 13)}</a><a href="${SOURCES.rcsTutorial}" target="_blank" rel="noopener noreferrer">RCS tester tutorial ${icon('external', 13)}</a></div></details>
+        <details class="presenter-notes"><summary>Device and channel notes</summary><p>Your Samsung Android 13 is outside Twilio’s documented Samsung Android 14+ support for US Enhanced Branded Calling. The iPhone and Android 14+ views are simulations. The approved caller name is “Twilio”; “Card security alert” illustrates a possible call reason and is not confirmed as the reason in your bundle. Twilio lists call-reason display on supported Android devices, while its iPhone entries list name and logo only.</p><p>The call reason comes from your approved Branded Calling registration, not the TwiML. Conversation Relay transcribes caller speech and voices agent replies with ElevenLabs; the local agent server gets responses from OpenAI.</p><p>Before RCS approval, send only to a tester who accepted the sender invitation. The SMS branch is illustrated, not sent as part of this rehearsal.</p><div><a href="${SOURCES.branded}" target="_blank" rel="noopener noreferrer">Calling guide ${icon('external', 13)}</a><a href="${SOURCES.relay}" target="_blank" rel="noopener noreferrer">Conversation Relay ${icon('external', 13)}</a><a href="${SOURCES.rcsTutorial}" target="_blank" rel="noopener noreferrer">RCS tester tutorial ${icon('external', 13)}</a></div></details>
       </aside></div>
     </main>
   </div>`;

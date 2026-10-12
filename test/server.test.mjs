@@ -17,6 +17,8 @@ const liveEnv = {
   TWILIO_RCS_CONTENT_SID: CONTENT_SID,
   TWILIO_VOICE_FROM: '+14155550101',
   DEMO_TO_NUMBER: '+14155550199',
+  TWILIO_CONVERSATION_RELAY_URL: 'wss://relay.example.test/voice-relay',
+  OPENAI_API_KEY: 'test-only-openai-key',
 };
 const presenterTokens = new Map();
 
@@ -148,6 +150,8 @@ test('simulated fraud alert journey advances only on explicit actions and reset 
     result = await action(base, 'previewBrandedCall');
     assert.equal(result.body.state.step, 'brandedRinging');
     assert.equal(result.body.state.callMode, 'simulated');
+    assert.equal(result.body.state.callPreviewDevice, 'android');
+    result = await action(base, 'showIphoneCallExample');
     assert.equal(result.body.state.callPreviewDevice, 'iphone');
     result = await action(base, 'showAndroidReasonExample');
     assert.equal(result.status, 200);
@@ -298,7 +302,32 @@ test('Twilio RCS rejection is sanitized and does not create a fake sent state', 
   }, { env: liveEnv, fetchImpl });
 });
 
-test('real call uses the configured approved caller number and an explicitly fictional fraud alert', async () => {
+test('live AI call requires a public relay URL and LLM key', async () => {
+  const { TWILIO_CONVERSATION_RELAY_URL, OPENAI_API_KEY, ...withoutAgent } = liveEnv;
+  await withServer(async (base) => {
+    const initial = await snapshot(base);
+    assert.equal(initial.config.voiceReady, false);
+    await toRewound(base);
+    await action(base, 'previewRcs');
+    await action(base, 'markNoResponse');
+    const result = await action(base, 'placeCall');
+    assert.equal(result.status, 503);
+    assert.equal((await snapshot(base)).state.step, 'noResponse');
+  }, { env: withoutAgent });
+});
+
+test('branded call preview defaults to the supported Android reason example', async () => {
+  await withServer(async (base) => {
+    await toRewound(base);
+    await action(base, 'previewRcs');
+    await action(base, 'markNoResponse');
+    const result = await action(base, 'previewBrandedCall');
+    assert.equal(result.status, 200);
+    assert.equal(result.body.state.callPreviewDevice, 'android');
+  });
+});
+
+test('real call uses the approved caller number and connects to an ElevenLabs voiced AI agent', async () => {
   const requests = [];
   const fetchImpl = async (url, init) => {
     requests.push({ url, init });
@@ -321,9 +350,13 @@ test('real call uses the configured approved caller number and an explicitly fic
     const form = new URLSearchParams(requests[0].init.body);
     assert.equal(form.get('To'), liveEnv.DEMO_TO_NUMBER);
     assert.equal(form.get('From'), liveEnv.TWILIO_VOICE_FROM);
-    assert.match(form.get('Twiml'), /fictional/i);
-    assert.match(form.get('Twiml'), /Anthony Dellavecchia/i);
-    assert.match(form.get('Twiml'), /nine thousand eight hundred dollar vehicle deposit/i);
+    assert.equal(result.body.state.callPreviewDevice, 'android');
+    assert.match(form.get('Twiml'), /<Connect><ConversationRelay /);
+    assert.match(form.get('Twiml'), /url="wss:\/\/relay\.example\.test\/voice-relay"/);
+    assert.match(form.get('Twiml'), /ttsProvider="ElevenLabs"/);
+    assert.match(form.get('Twiml'), /voice="UgBBYS2sOqTuMpoF3BR0"/);
+    assert.match(form.get('Twiml'), /Twilio Bank virtual assistant/);
+    assert.doesNotMatch(form.get('Twiml'), /<Say>/);
   }, { env: liveEnv, fetchImpl });
 });
 

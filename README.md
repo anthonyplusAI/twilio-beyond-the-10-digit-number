@@ -14,25 +14,27 @@ The Twilio Bank account, merchant, charge, and illustrated phone screens are fic
 - How a Messaging Service can try RCS first and use configured SMS or MMS senders when RCS is unavailable. [RCS sending and fallback](https://www.twilio.com/docs/rcs/send-an-rcs-message)
 - How an approved US Enhanced Branded Calling number can show a business name, logo, and, on supported devices, a call reason. [US Enhanced Branded Calling](https://www.twilio.com/docs/voice/branded-calling/us-enhanced)
 - How an application can decide when to follow up after no response. In this demo, the presenter controls that decision.
+- How a live follow-up call can connect to an AI agent: Twilio ConversationRelay handles speech and ElevenLabs voice output while the application supplies the conversation logic. [ConversationRelay](https://www.twilio.com/docs/voice/twiml/connect/conversationrelay) · [Voice selection](https://www.twilio.com/docs/voice/conversationrelay/voice-configuration)
 
 ## Replay the simulation yourself
 
 You need Node.js 22 or newer. From this project folder, run:
 
+    npm install
     npm run dev
 
-Open the private **Presenter** URL printed in the terminal, then click **Open audience window** to see the customer view. Keep the presenter window private if you share your screen. No Twilio credentials or package install are needed for the preview; **Show RCS preview** and **Show call preview** do not send anything.
+Open the private **Presenter** URL printed in the terminal, then click **Open audience window** to see the customer view. Keep the presenter window private if you share your screen. No Twilio credentials are needed for the preview; **Show RCS preview** and **Show call preview** do not send anything.
 
 ## Follow the story
 
 1. **Flag purchase.** See Anthony’s $9,800.00 vehicle deposit in the banking app.
 2. **Show unknown call → Anthony ignores it.** The important alert becomes a missed call.
 3. **Rewind → Show RCS preview.** A branded card supplies context and reply choices. [Twilio card](https://www.twilio.com/docs/content/twiliocard)
-4. **Mark no response → Show call preview.** The illustrated iPhone shows the registered caller name **Twilio** and logo. **Show Android call reason** adds an illustrative “Card security alert” reason on a supported Android example; the actual approved reason has not been verified. [Supported device table](https://www.twilio.com/docs/voice/branded-calling/us-enhanced)
+4. **Mark no response → Show call preview.** The illustrated Android 14+ phone shows the registered caller name **Twilio**, logo, and an **example** “Card security alert” reason. Compare the iPhone illustration for name and logo only. The actual approved call reason has not been verified. [Supported device table](https://www.twilio.com/docs/voice/branded-calling/us-enhanced)
 5. **Mark customer reached → Show architecture.** See the channel routing and a labeled event log.
 
 ## Read the architecture
 
-The RCS branch uses a Messaging Service and a Content Template. With both RCS and SMS/MMS senders in its pool, Twilio can attempt RCS first and fall back to a supported text channel. The follow-up call is a separate decision made by the application. [RCS sending and fallback](https://www.twilio.com/docs/rcs/send-an-rcs-message) · [Content API](https://www.twilio.com/docs/content/content-api-resources) · [Calls API](https://www.twilio.com/docs/voice/api/call-resource)
+The RCS branch uses a Messaging Service and a Content Template. With both RCS and SMS/MMS senders in its pool, Twilio can attempt RCS first and fall back to a supported text channel. The follow-up call is a separate decision made by the application. For a live call, the Calls API connects to ConversationRelay; the app sends each caller turn to an LLM and returns the response for ElevenLabs speech. [RCS sending and fallback](https://www.twilio.com/docs/rcs/send-an-rcs-message) · [Calls API](https://www.twilio.com/docs/voice/api/call-resource) · [ConversationRelay WebSocket messages](https://www.twilio.com/docs/voice/conversationrelay/websocket-messages)
 
 To configure real sends, rehearse device behavior, or operate the webinar, see the [presenter guide](PRESENTER.md).

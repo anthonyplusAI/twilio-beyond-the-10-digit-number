@@ -194,6 +194,16 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px soli
 .channel-fallback { background: var(--surface-soft); }
 .branch-dot { display: block; width: 7px; height: 7px; border-radius: 50%; background: var(--blue); flex: none; }
 .channel-fallback .branch-dot { background: var(--subtle); }
+.voice-agent-path { margin-top: 18px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-soft); }
+.voice-agent-path-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 13px; }
+.voice-agent-path-heading strong { font-size: 14px; }
+.voice-agent-path-heading a { display: inline-flex; align-items: center; gap: 5px; color: var(--blue); font-size: 12px; font-weight: 700; text-decoration: none; }
+.voice-agent-path-heading a:hover { text-decoration: underline; }
+.voice-agent-steps { display: grid; grid-template-columns: minmax(0, 1fr) 18px minmax(0, 1fr) 18px minmax(0, 1fr); gap: 9px; align-items: stretch; }
+.voice-agent-step { display: grid; align-content: center; gap: 4px; min-width: 0; padding: 10px 12px; border-left: 3px solid var(--blue); border-radius: 5px; background: var(--surface); }
+.voice-agent-step strong { font-size: 13px; line-height: 1.2; }
+.voice-agent-step span { color: var(--muted); font-size: 12px; line-height: 1.35; }
+.voice-agent-arrow { align-self: center; color: var(--subtle); font-size: 20px; text-align: center; }
 .flow-note { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding-top: 18px; margin-top: 18px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
 .flow-note > span, .flow-note a, .identity-item a { display: inline-flex; align-items: center; gap: 7px; }
 .flow-note a, .identity-item a { color: var(--blue); text-decoration: none; font-weight: 700; }
@@ -379,6 +389,9 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px soli
   .flow-row { grid-template-columns: minmax(0, 1fr); }
   .flow-node { min-height: 0; }
   .flow-node small { margin-top: 12px; }
+  .voice-agent-path-heading { align-items: flex-start; flex-direction: column; gap: 6px; }
+  .voice-agent-steps { grid-template-columns: minmax(0, 1fr); }
+  .voice-agent-arrow { display: none; }
   .flow-note { align-items: flex-start; flex-direction: column; }
   .identity-grid { grid-template-columns: 1fr; gap: 14px; }
   .identity-item { border-right: 0; border-bottom: 1px solid var(--line); padding-bottom: 14px; }
@@ -424,4 +437,15 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px soli
   .bank-stage.contact-active .phone-screen-connected .phone-connected-grid { row-gap: 8px; }
   .bank-stage.contact-active .phone-screen-connected .phone-call-action-disc { width: 46px; height: 46px; }
   .bank-stage.contact-active .phone-screen-connected .phone-connected-end .phone-call-action-disc { width: 55px; height: 55px; }
+  .bank-stage.contact-active .phone-screen-android-call .phone-android-call-label { margin-top: 5px; font-size: 12px; }
+  .bank-stage.contact-active .phone-screen-android-call .phone-android-call-identity { margin-top: 10px; }
+  .bank-stage.contact-active .phone-screen-android-call .phone-android-avatar { width: 78px; height: 78px; margin-top: 11px; }
+  .bank-stage.contact-active .phone-screen-android-call .phone-android-avatar .phone-twilio-mark { width: 57px; height: 57px; }
+  .bank-stage.contact-active .phone-screen-android-call .phone-android-name { margin-top: 10px; font-size: 30px; }
+  .bank-stage.contact-active .phone-screen-android-call .phone-android-reason { min-width: 220px; margin-top: 9px; padding: 8px 14px 10px; }
+  .bank-stage.contact-active .phone-screen-android-call .phone-android-reason span { font-size: 11px; }
+  .bank-stage.contact-active .phone-screen-android-call .phone-android-reason strong { font-size: 19px; }
+  .bank-stage.contact-active .phone-screen-android-call .phone-android-incoming-controls { gap: 15px; margin-bottom: 25px; }
+  .bank-stage.contact-active .phone-screen-android-call .phone-android-secondary .phone-call-action-disc { width: 40px; height: 40px; }
+  .bank-stage.contact-active .phone-screen-android-call .phone-android-answer .phone-call-action-disc { width: 59px; height: 59px; }
 }

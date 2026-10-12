@@ -1,6 +1,6 @@
 # One-time Azure setup
 
-These resources have been provisioned in the dedicated **DevNet Demos Prod** subscription in `centralus`. The commands below are a reproducibility and handoff reference; skip creation for resources that already exist. The current public hostname is `twilio-branded-comms.jollymushroom-29e673c9.centralus.azurecontainerapps.io`, giving the site `https://twilio-branded-comms.jollymushroom-29e673c9.centralus.azurecontainerapps.io/bank` and voice endpoint `wss://twilio-branded-comms.jollymushroom-29e673c9.centralus.azurecontainerapps.io/voice-relay`. The private presenter token is saved in local `.env` and an Azure secret; do not regenerate it for each release. The workflow updates the app image while runtime values stay in Azure. [Azure Container Apps CLI](https://learn.microsoft.com/en-us/cli/azure/containerapp?view=azure-cli-latest) · [GitHub OIDC with Azure](https://learn.microsoft.com/en-us/azure/developer/github/connect-from-azure-openid-connect)
+These resources have been provisioned in the dedicated **DevNet Demos Prod** subscription in `centralus`. The commands below are a reproducibility and handoff reference; skip creation for resources that already exist. The current public hostname is `twilio-branded-comms.jollymushroom-29e673c9.centralus.azurecontainerapps.io`, giving the site `https://twilio-branded-comms.jollymushroom-29e673c9.centralus.azurecontainerapps.io/bank` and voice endpoint `wss://twilio-branded-comms.jollymushroom-29e673c9.centralus.azurecontainerapps.io/voice-relay`. The private presenter password is saved in local `.env` and an Azure secret. The workflow updates the app image while runtime values stay in Azure. [Azure Container Apps CLI](https://learn.microsoft.com/en-us/cli/azure/containerapp?view=azure-cli-latest) · [GitHub OIDC with Azure](https://learn.microsoft.com/en-us/azure/developer/github/connect-from-azure-openid-connect)
 
 The subscription requires a `created_by` resource tag. Create the Log Analytics workspace explicitly: otherwise `az containerapp env create` can generate an untagged workspace that the policy rejects.
 
@@ -75,17 +75,16 @@ gh secret set AZURE_SUBSCRIPTION_ID --repo "$GH_REPO" --body "$AZ_SUBSCRIPTION_I
 
 Check the configured **names**, without printing secret values: `gh variable list --repo "$GH_REPO"` and `gh secret list --repo "$GH_REPO"`. Azure role assignments can take a few minutes to propagate before the first workflow run.
 
-## 4. Set the public URL and private presenter token
+## 4. Set the public URL and private presenter password
 
-The public URL enables the exact host/origin checks and lets the app derive `wss://<app-fqdn>/voice-relay`. Generate a stable 32-byte base64url presenter token once; save its URL privately before unsetting the shell variable. The token is kept in a Container Apps secret and is not printed by the deployed server. [Azure ingress and WebSocket support](https://learn.microsoft.com/en-us/azure/container-apps/ingress-overview) · [Container Apps secret references](https://learn.microsoft.com/en-us/azure/container-apps/environment-variables)
+The public URL enables the exact host/origin checks and lets the app derive `wss://<app-fqdn>/voice-relay`. Set a private presenter password in a Container Apps secret. Visitors enter it on `/presenter`; it is never part of the URL or printed by the deployed server. [Azure ingress and WebSocket support](https://learn.microsoft.com/en-us/azure/container-apps/ingress-overview) · [Container Apps secret references](https://learn.microsoft.com/en-us/azure/container-apps/environment-variables)
 
 ```bash
 AZ_FQDN=$(az containerapp show --name "$AZ_CONTAINER_APP" --resource-group "$AZ_RESOURCE_GROUP" --query properties.configuration.ingress.fqdn --output tsv)
-BANK_PRESENTER_TOKEN=$(node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("base64url"))')
-az containerapp secret set --name "$AZ_CONTAINER_APP" --resource-group "$AZ_RESOURCE_GROUP" --secrets "presenter-token=$BANK_PRESENTER_TOKEN" --output none
-az containerapp update --name "$AZ_CONTAINER_APP" --resource-group "$AZ_RESOURCE_GROUP" --set-env-vars "PORT=8080" "PUBLIC_BASE_URL=https://${AZ_FQDN}" "PRESENTER_TOKEN=secretref:presenter-token" --output none
-printf 'Save privately: https://%s/presenter#token=%s\n' "$AZ_FQDN" "$BANK_PRESENTER_TOKEN"
-unset BANK_PRESENTER_TOKEN
+printf 'Presenter password: '; IFS= read -rs BANK_PRESENTER_PASSWORD; printf '\n'
+az containerapp secret set --name "$AZ_CONTAINER_APP" --resource-group "$AZ_RESOURCE_GROUP" --secrets "presenter-password=$BANK_PRESENTER_PASSWORD" --output none
+az containerapp update --name "$AZ_CONTAINER_APP" --resource-group "$AZ_RESOURCE_GROUP" --set-env-vars "PORT=8080" "PUBLIC_BASE_URL=https://${AZ_FQDN}" "PRESENTER_PASSWORD=secretref:presenter-password" --output none
+unset BANK_PRESENTER_PASSWORD
 ```
 
 After the workflow files are on `main`, run `gh workflow run deploy.yml --repo "$GH_REPO" --ref main` and watch the run in GitHub Actions. A push to `main` also deploys automatically. If the push happened before Azure was configured, its preflight will fail and the manual run can be used after setup.

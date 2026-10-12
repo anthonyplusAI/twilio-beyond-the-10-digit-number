@@ -9,9 +9,9 @@ Install dependencies once, then run the local server:
     npm install
     npm run dev
 
-Use this command so Node loads the values in `.env`. Starting `node server/index.mjs` directly leaves the live RCS and call buttons unavailable unless those values are already in the shell environment.
+Set `PRESENTER_PASSWORD` in your local `.env` before starting. Use this command so Node loads the values in `.env`. Starting `node server/index.mjs` directly leaves the live RCS and call buttons unavailable unless those values are already in the shell environment.
 
-Open the **Presenter** URL printed in the terminal. For the [hosted webinar app](docs/DEPLOYMENT.md), open `https://twilio-branded-comms.jollymushroom-29e673c9.centralus.azurecontainerapps.io/presenter#token=<PRESENTER_TOKEN>` using the token saved privately in `.env` and Azure. Keep that tab private. Click **Open audience window** and share only that window. The audience starts at /bank; **Show architecture** changes the same shared window to /architecture. The prominent next step ends at **Story complete**. Use **Restart story** in the current step box to begin again at any point; this clears the story and returns the audience to the bank view, but does not cancel a message or call already placed.
+Open the **Presenter** URL printed in the terminal and enter the password on the page. For the [hosted webinar app](docs/DEPLOYMENT.md), open `https://twilio-branded-comms.jollymushroom-29e673c9.centralus.azurecontainerapps.io/presenter`. Keep that tab private. Click **Open audience window** and share only that window. The audience starts at /bank; **Show architecture** changes the same shared window to /architecture. The prominent next step ends at **Story complete**. Use **Restart story** in the current step box to begin again at any point; this clears the story and returns the audience to the bank view, but does not cancel a message or call already placed.
 
 At step **05/09**, the current step box turns green before **Send live RCS**; at **07/09**, it does the same before **Place live AI call** when its configuration is complete. Those green **Real phone** buttons unlock only at their matching step. The detailed runbook labels future live buttons with their unlock step. After an accepted live request, the cue changes to **Check your phone now**. Preview buttons change only the illustrated phone. API acceptance does not guarantee handset delivery or a human answer. [Message statuses](https://www.twilio.com/docs/messaging/api/message-resource) · [Call statuses](https://www.twilio.com/docs/voice/api/call-resource)
 
@@ -72,7 +72,7 @@ Use **Mark customer reached** only when that fits the story. A completed Call re
 
 - The site and signed WebSocket share one server and port. Local preview binds to 127.0.0.1; Azure serves them through one HTTPS hostname. Browser state contains only readiness flags and masked phone numbers. [ConversationRelay WebSocket security](https://www.twilio.com/docs/voice/conversationrelay/onboarding)
 - The fixed DEMO_TO_NUMBER is the only destination for real sends and calls; the presenter UI cannot change it.
-- Azure uses a stable private `PRESENTER_TOKEN`; local preview generates one when none is configured. Story state stays in memory and resets on restart or **Restart story**. Avoid deployments during the webinar.
+- Presenter login uses a private `PRESENTER_PASSWORD` and a browser session cookie. Local preview loads the password from `.env`; Azure reads it from a Container Apps secret. Story state stays in memory and resets on restart or **Restart story**. Avoid deployments during the webinar.
 - Apple Messages for Business is outside this sample app while the separate webinar demo material is being prepared.
 - After changes, run:
 

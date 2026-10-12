@@ -52,7 +52,7 @@ body { margin: 0; color: var(--text); background: var(--page); -webkit-font-smoo
 button, a { -webkit-tap-highlight-color: transparent; }
 button { font: inherit; }
 a { color: inherit; }
-button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
 .icon { flex: none; vertical-align: middle; }
 .bug-mark { display: block; width: 27px; height: 27px; }
 
@@ -240,6 +240,22 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px soli
 .architecture-disclaimer a { color: var(--muted); }
 
 /* Private presenter view */
+.presenter-login-shell { min-height: 100vh; background: var(--page); }
+.presenter-login-main { min-height: calc(100vh - 72px); display: grid; place-items: center; padding: 32px 20px 64px; }
+.presenter-login-card { width: min(100%, 440px); padding: 34px 36px 38px; border: 1px solid var(--line); border-top: 4px solid var(--red); border-radius: 14px; background: var(--surface); box-shadow: var(--shadow); }
+.presenter-login-symbol { width: 46px; height: 46px; display: grid; place-items: center; margin-bottom: 22px; border-radius: 12px; color: var(--red); background: var(--red-soft); }
+.presenter-login-card h1 { margin: 0; font-family: "Avenir Next", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 32px; line-height: 1.12; letter-spacing: -0.04em; }
+.presenter-login-card > p { margin: 12px 0 27px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.presenter-login-card form { display: grid; gap: 10px; }
+.presenter-login-card label { font-size: 13px; font-weight: 700; }
+.presenter-login-card input { width: 100%; min-height: 45px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-raised); color: var(--text); font: inherit; font-size: 15px; }
+.presenter-login-card input[aria-invalid="true"] { border-color: var(--red); }
+.presenter-login-card input:disabled { opacity: 0.7; }
+.presenter-login-card form button { min-height: 45px; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; padding: 10px 14px; border: 0; border-radius: 9px; color: #fff; background: var(--red-hover); font-size: 13px; font-weight: 800; cursor: pointer; }
+.presenter-login-card form button:hover:not(:disabled) { background: var(--red); }
+.presenter-login-card form button:disabled { opacity: 0.65; cursor: wait; }
+.presenter-login-error { display: flex; align-items: flex-start; gap: 7px; margin: 2px 0 0; color: var(--text); font-size: 12px; line-height: 1.4; }
+.presenter-login-error .icon { color: var(--red); }
 .presenter-shell { min-height: 100vh; background: var(--page); }
 .presenter-topbar { height: 72px; display: flex; align-items: center; justify-content: space-between; padding: 0 clamp(24px, 4vw, 60px); background: var(--surface-soft); border-bottom: 1px solid var(--line); }
 .presenter-topbar-right { display: flex; align-items: center; gap: 16px; }
@@ -370,6 +386,8 @@ button:focus-visible, a:focus-visible, summary:focus-visible { outline: 3px soli
   .bank-stage.contact-active .account-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 }
 @media (max-width: 760px) {
+  .presenter-login-main { align-items: start; padding: 36px 18px; }
+  .presenter-login-card { padding: 27px 24px 30px; }
   .bank-service-status { display: none; }
   .bank-topbar { padding: 0 18px; }
   .bank-canvas { padding: 20px 18px 36px; }

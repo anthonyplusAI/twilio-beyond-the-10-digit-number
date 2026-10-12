@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import twilio from 'twilio';
@@ -13,6 +12,7 @@ const MESSAGE_SID = `SM${'b'.repeat(32)}`;
 const CALL_SID = `CA${'c'.repeat(32)}`;
 const SERVICE_SID = `MG${'d'.repeat(32)}`;
 const CONTENT_SID = `HX${'e'.repeat(32)}`;
+const TEST_PRESENTER_PASSWORD = 'test-only-presenter-pass';
 
 const liveEnv = {
   TWILIO_ACCOUNT_SID: ACCOUNT_SID,
@@ -24,18 +24,27 @@ const liveEnv = {
   TWILIO_CONVERSATION_RELAY_URL: 'wss://relay.example.test/voice-relay',
   OPENAI_API_KEY: 'test-only-openai-key',
 };
-const presenterTokens = new Map();
+const presenterCookies = new Map();
 
 async function withServer(fn, options = {}) {
-  const server = createAppServer(options);
+  const env = { ...(options.env ?? {}), PRESENTER_PASSWORD: options.env?.PRESENTER_PASSWORD ?? TEST_PRESENTER_PASSWORD };
+  const server = createAppServer({ ...options, env });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   const base = `http://127.0.0.1:${server.address().port}`;
-  presenterTokens.set(base, server.presenterToken);
   try {
-    await fn(base, server.presenterToken);
+    const login = await fetch(`${base}/api/presenter/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: env.PRESENTER_PASSWORD }),
+    });
+    assert.equal(login.status, 200);
+    const cookie = login.headers.get('set-cookie')?.split(';', 1)[0];
+    assert.ok(cookie);
+    presenterCookies.set(base, cookie);
+    await fn(base, cookie);
   } finally {
-    presenterTokens.delete(base);
+    presenterCookies.delete(base);
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
   }
@@ -48,10 +57,10 @@ async function snapshot(base) {
 }
 
 async function action(base, name, rest = {}) {
-  const token = presenterTokens.get(base);
+  const cookie = presenterCookies.get(base);
   const response = await fetch(`${base}/api/action`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json', ...(token ? { 'x-presenter-token': token } : {}) },
+    headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) },
     body: JSON.stringify({ action: name, ...rest }),
   });
   return { status: response.status, body: await response.json() };
@@ -70,7 +79,7 @@ async function requestWithHeaders(base, path, { method = 'GET', headers = {}, bo
       let text = '';
       response.setEncoding('utf8');
       response.on('data', (chunk) => { text += chunk; });
-      response.on('end', () => resolve({ status: response.statusCode, body: text }));
+      response.on('end', () => resolve({ status: response.statusCode, body: text, headers: response.headers }));
     });
     request.on('error', reject);
     request.end(body);
@@ -86,30 +95,42 @@ async function unusedPort() {
   return port;
 }
 
-test('presenter actions require a private per-server token while audience state remains readable', async () => {
-  await withServer(async (base, token) => {
-    assert.equal(typeof token, 'string');
-    assert.ok(token.length >= 32);
+test('presenter actions require a login session while audience state remains readable', async () => {
+  await withServer(async (base, cookie) => {
     const audience = await snapshot(base);
     assert.equal(audience.state.step, 'idle');
-    assert.equal(JSON.stringify(audience).includes(token), false);
+    assert.equal(JSON.stringify(audience).includes(TEST_PRESENTER_PASSWORD), false);
+
+    const anonymousSession = await fetch(`${base}/api/presenter/session`);
+    assert.deepEqual(await anonymousSession.json(), { authenticated: false });
 
     const unauthorized = await fetch(`${base}/api/action`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ action: 'flagPurchase' }),
     });
-    assert.equal(unauthorized.status, 403);
-    assert.equal((await unauthorized.json()).code, 'PRESENTER_FORBIDDEN');
+    assert.equal(unauthorized.status, 401);
+    assert.equal((await unauthorized.json()).code, 'PRESENTER_AUTH_REQUIRED');
 
-    const wrongToken = await fetch(`${base}/api/action`, {
+    const forgedLegacyHeader = await fetch(`${base}/api/action`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-presenter-token': 'wrong-token' },
+      headers: { 'content-type': 'application/json', 'x-presenter-token': 'old-token' },
       body: JSON.stringify({ action: 'flagPurchase' }),
     });
-    assert.equal(wrongToken.status, 403);
-    assert.equal((await wrongToken.json()).code, 'PRESENTER_FORBIDDEN');
+    assert.equal(forgedLegacyHeader.status, 401);
+    assert.equal((await forgedLegacyHeader.json()).code, 'PRESENTER_AUTH_REQUIRED');
     assert.equal((await snapshot(base)).state.step, 'idle');
+
+    const wrongLogin = await fetch(`${base}/api/presenter/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: 'wrong-password' }),
+    });
+    assert.equal(wrongLogin.status, 401);
+    assert.equal(wrongLogin.headers.get('set-cookie'), null);
+
+    const authenticatedSession = await fetch(`${base}/api/presenter/session`, { headers: { cookie } });
+    assert.deepEqual(await authenticatedSession.json(), { authenticated: true });
 
     const authorized = await action(base, 'flagPurchase');
     assert.equal(authorized.status, 200);
@@ -117,8 +138,25 @@ test('presenter actions require a private per-server token while audience state 
   });
 });
 
+test('presenter login issues an HttpOnly same-site session cookie', async () => {
+  await withServer(async (base) => {
+    const response = await fetch(`${base}/api/presenter/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: TEST_PRESENTER_PASSWORD }),
+    });
+    assert.equal(response.status, 200);
+    const cookie = response.headers.get('set-cookie');
+    assert.match(cookie, /HttpOnly/i);
+    assert.match(cookie, /SameSite=Strict/i);
+    assert.match(cookie, /Path=\//i);
+    assert.doesNotMatch(cookie, /Secure/i);
+    assert.equal((await response.json()).authenticated, true);
+  });
+});
+
 test('non-loopback Host and cross-origin presenter requests are rejected', async () => {
-  await withServer(async (base, token) => {
+  await withServer(async (base, cookie) => {
     const wrongHost = await new Promise((resolve, reject) => {
       http.get(`${base}/api/state`, { headers: { host: `attacker.example:${new URL(base).port}` } }, (response) => {
         let body = '';
@@ -134,7 +172,7 @@ test('non-loopback Host and cross-origin presenter requests are rejected', async
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-presenter-token': token,
+        cookie,
         origin: 'https://attacker.example',
       },
       body: JSON.stringify({ action: 'flagPurchase' }),
@@ -143,11 +181,18 @@ test('non-loopback Host and cross-origin presenter requests are rejected', async
     assert.equal((await wrongOrigin.json()).code, 'LOCAL_ORIGIN_REQUIRED');
     assert.equal((await snapshot(base)).state.step, 'idle');
 
+    const wrongLoginOrigin = await fetch(`${base}/api/presenter/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'https://attacker.example' },
+      body: JSON.stringify({ password: TEST_PRESENTER_PASSWORD }),
+    });
+    assert.equal(wrongLoginOrigin.status, 403);
+
     const sameOrigin = await fetch(`${base}/api/action`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-presenter-token': token,
+        cookie,
         origin: base,
       },
       body: JSON.stringify({ action: 'flagPurchase' }),
@@ -157,22 +202,21 @@ test('non-loopback Host and cross-origin presenter requests are rejected', async
   });
 });
 
-test('public deployment requires a stable presenter token before the server starts', () => {
+test('server requires a presenter password before it starts', () => {
   assert.throws(
     () => createAppServer({ env: { PUBLIC_BASE_URL: 'https://demo.example.test' } }),
-    /PRESENTER_TOKEN/,
+    /PRESENTER_PASSWORD/,
   );
   assert.throws(
-    () => createAppServer({ env: { PUBLIC_BASE_URL: 'https://demo.example.test', PRESENTER_TOKEN: 'guess-me' } }),
-    /PRESENTER_TOKEN/,
+    () => createAppServer({ env: { PRESENTER_PASSWORD: '   ' } }),
+    /PRESENTER_PASSWORD/,
   );
 });
 
 test('public deployment accepts only a bare HTTPS origin', () => {
-  const token = randomBytes(32).toString('base64url');
   for (const publicBaseUrl of ['http://demo.example.test', 'https://demo.example.test/bank', 'https://user@demo.example.test']) {
     assert.throws(
-      () => createAppServer({ env: { PUBLIC_BASE_URL: publicBaseUrl, PRESENTER_TOKEN: token } }),
+      () => createAppServer({ env: { PUBLIC_BASE_URL: publicBaseUrl, PRESENTER_PASSWORD: TEST_PRESENTER_PASSWORD } }),
       /PUBLIC_BASE_URL/,
     );
   }
@@ -181,16 +225,14 @@ test('public deployment accepts only a bare HTTPS origin', () => {
 test('public deployment rejects a relay URL on a different origin', () => {
   assert.throws(() => createAppServer({ env: {
     PUBLIC_BASE_URL: 'https://demo.example.test',
-    PRESENTER_TOKEN: randomBytes(32).toString('base64url'),
+    PRESENTER_PASSWORD: TEST_PRESENTER_PASSWORD,
     TWILIO_CONVERSATION_RELAY_URL: 'wss://other.example.test/voice-relay',
   } }), /TWILIO_CONVERSATION_RELAY_URL/);
 });
 
 test('public deployment accepts only its configured Host and same-origin presenter actions', async () => {
-  const token = randomBytes(32).toString('base64url');
-  const env = { ...liveEnv, TWILIO_CONVERSATION_RELAY_URL: '', PUBLIC_BASE_URL: 'https://demo.example.test', PRESENTER_TOKEN: token };
-  await withServer(async (base, activeToken) => {
-    assert.equal(activeToken, token);
+  const env = { ...liveEnv, TWILIO_CONVERSATION_RELAY_URL: '', PUBLIC_BASE_URL: 'https://demo.example.test', PRESENTER_PASSWORD: TEST_PRESENTER_PASSWORD };
+  await withServer(async (base, cookie) => {
     const publicState = await requestWithHeaders(base, '/api/state', { headers: { host: 'demo.example.test' } });
     assert.equal(publicState.status, 200);
     assert.equal(JSON.parse(publicState.body).state.step, 'idle');
@@ -203,7 +245,7 @@ test('public deployment accepts only its configured Host and same-origin present
       method: 'POST',
       headers: {
         host: 'demo.example.test', origin: 'https://attacker.example.test',
-        'content-type': 'application/json', 'x-presenter-token': token,
+        'content-type': 'application/json', cookie,
       },
       body: actionBody,
     });
@@ -213,19 +255,27 @@ test('public deployment accepts only its configured Host and same-origin present
       method: 'POST',
       headers: {
         host: 'demo.example.test', origin: 'https://demo.example.test',
-        'content-type': 'application/json', 'x-presenter-token': token,
+        'content-type': 'application/json', cookie,
       },
       body: actionBody,
     });
     assert.equal(validAction.status, 200);
     assert.equal(JSON.parse(validAction.body).state.step, 'flagged');
+
+    const publicLogin = await requestWithHeaders(base, '/api/presenter/login', {
+      method: 'POST',
+      headers: { host: 'demo.example.test', origin: 'https://demo.example.test', 'content-type': 'application/json' },
+      body: JSON.stringify({ password: TEST_PRESENTER_PASSWORD }),
+    });
+    assert.equal(publicLogin.status, 200);
+    assert.match(publicLogin.headers['set-cookie']?.[0] ?? '', /^__Host-twilio_bank_presenter=[^;]+; HttpOnly; SameSite=Strict; Path=\/; Secure$/);
   }, { env });
 });
 
-test('health probe responds without a presenter token or public Host header', async () => {
+test('health probe responds without a presenter login or public Host header', async () => {
   const env = {
     PUBLIC_BASE_URL: 'https://demo.example.test',
-    PRESENTER_TOKEN: randomBytes(32).toString('base64url'),
+    PRESENTER_PASSWORD: TEST_PRESENTER_PASSWORD,
   };
   await withServer(async (base) => {
     const response = await requestWithHeaders(base, '/healthz', { headers: { host: 'probe.internal' } });
@@ -239,7 +289,7 @@ test('voice readiness uses the WebSocket URL derived from the public origin', as
     ...liveEnv,
     TWILIO_CONVERSATION_RELAY_URL: '',
     PUBLIC_BASE_URL: 'https://demo.example.test',
-    PRESENTER_TOKEN: randomBytes(32).toString('base64url'),
+    PRESENTER_PASSWORD: TEST_PRESENTER_PASSWORD,
   };
   await withServer(async (base) => {
     const response = await requestWithHeaders(base, '/api/state', { headers: { host: 'demo.example.test' } });
@@ -253,7 +303,7 @@ test('one public port serves the site and a Twilio-signed ConversationRelay WebS
     ...liveEnv,
     TWILIO_CONVERSATION_RELAY_URL: '',
     PUBLIC_BASE_URL: 'https://demo.example.test',
-    PRESENTER_TOKEN: randomBytes(32).toString('base64url'),
+    PRESENTER_PASSWORD: TEST_PRESENTER_PASSWORD,
   };
   await withServer(async (base) => {
     const page = await requestWithHeaders(base, '/bank', { headers: { host: 'demo.example.test' } });
@@ -300,17 +350,16 @@ test('one public port serves the site and a Twilio-signed ConversationRelay WebS
   });
 });
 
-test('public entrypoint starts one port and keeps the presenter token out of logs', { timeout: 8_000 }, async () => {
+test('public entrypoint starts one port and keeps the presenter password out of logs', { timeout: 8_000 }, async () => {
   const port = await unusedPort();
   const oldRelayPort = await unusedPort();
-  const token = randomBytes(32).toString('base64url');
   const child = spawn(process.execPath, ['server/index.mjs'], {
     cwd: new URL('..', import.meta.url),
     env: {
       PORT: String(port),
       VOICE_PORT: String(oldRelayPort),
       PUBLIC_BASE_URL: 'https://demo.example.test',
-      PRESENTER_TOKEN: token,
+      PRESENTER_PASSWORD: TEST_PRESENTER_PASSWORD,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -337,7 +386,9 @@ test('public entrypoint starts one port and keeps the presenter token out of log
     } finally {
       clearTimeout(startupTimer);
     }
-    assert.doesNotMatch(output, new RegExp(token));
+    assert.doesNotMatch(output, new RegExp(TEST_PRESENTER_PASSWORD));
+    assert.match(output, new RegExp(`Presenter: https://demo.example.test/presenter`));
+    assert.doesNotMatch(output, /#token=/);
     const health = await fetch(`http://127.0.0.1:${port}/healthz`);
     assert.equal(health.status, 200);
     await assert.rejects(fetch(`http://127.0.0.1:${oldRelayPort}/voice-relay`, { signal: AbortSignal.timeout(500) }));

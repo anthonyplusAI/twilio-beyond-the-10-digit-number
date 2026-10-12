@@ -1,9 +1,13 @@
 import { renderPhone } from './phone.js';
 
 const root = document.getElementById('app');
-const presenterToken = window.location.pathname === '/presenter'
-  ? (new URLSearchParams(window.location.hash.slice(1)).get('token') || '')
-  : '';
+const isPresenter = window.location.pathname === '/presenter';
+if (isPresenter && (window.location.hash || new URLSearchParams(window.location.search).has('token'))) {
+  const cleanUrl = new URL(window.location.href);
+  cleanUrl.hash = '';
+  cleanUrl.searchParams.delete('token');
+  window.history.replaceState(null, '', cleanUrl.pathname + cleanUrl.search);
+}
 const SOURCES = {
   trustHub: 'https://www.twilio.com/docs/trust-hub',
   rcsOnboarding: 'https://www.twilio.com/docs/rcs/onboarding',
@@ -28,6 +32,9 @@ const SCENES = {
 };
 
 let snapshot = null;
+let presenterAuthenticated = isPresenter ? null : false;
+let loginPending = false;
+let loginError = '';
 let pendingAction = null;
 let actionError = '';
 let transportError = '';
@@ -115,10 +122,10 @@ function sceneFor(state) {
 }
 
 function phoneCueFor(state, config) {
-  if (presenterToken && state.step === 'rewound' && config.rcsReady) {
+  if (presenterAuthenticated && state.step === 'rewound' && config.rcsReady) {
     return { key: 'ready:rcs', label: 'Real phone step', detail: pendingAction === 'sendRcs' ? 'Sending the fraud alert to your test phone…' : 'Click Send live RCS to send the fraud alert to your test phone.' };
   }
-  if (presenterToken && state.step === 'noResponse' && config.voiceReady) {
+  if (presenterAuthenticated && state.step === 'noResponse' && config.voiceReady) {
     return { key: 'ready:call', label: 'Real phone step', detail: pendingAction === 'placeCall' ? 'Placing the AI agent call to your test phone…' : 'Click Place AI agent call, then answer your phone and speak with the agent.' };
   }
   if (state.step === 'rcsSent' && state.messageMode === 'live') {
@@ -181,8 +188,19 @@ function restorePresenterFocus(intent) {
 }
 
 function render() {
-  if (!snapshot) return;
   const path = window.location.pathname;
+  if (path === '/presenter' && presenterAuthenticated !== true) {
+    document.title = 'Presenter sign in · Twilio Bank';
+    if (presenterAuthenticated === null) {
+      if (!root.querySelector('.presenter-auth-loading')) {
+        root.innerHTML = `<div class="loading-screen presenter-auth-loading" role="status"><div class="loading-mark">••<br />••</div><p>Checking presenter access…</p></div>`;
+      }
+    } else if (!root.querySelector('.presenter-login-shell')) {
+      renderPresenterLogin();
+    }
+    return;
+  }
+  if (!snapshot) return;
   const state = snapshot.state;
   if (path === '/presenter') {
     deferredPresenterFocus = focusedPresenterControl() || deferredPresenterFocus;
@@ -203,6 +221,24 @@ function render() {
     document.title = 'Customer account · Twilio Bank';
     root.innerHTML = renderBank(state);
   }
+}
+
+function renderPresenterLogin() {
+  root.innerHTML = `<div class="presenter-login-shell">
+    <header class="presenter-topbar">${brand()}${themeButton()}</header>
+    <main class="presenter-login-main"><section class="presenter-login-card" aria-labelledby="presenter-login-title">
+      <div class="presenter-login-symbol">${icon('shield', 25)}</div>
+      <h1 id="presenter-login-title">Presenter sign in</h1>
+      <p>Enter the password to run Anthony’s fraud alert story.</p>
+      <form data-presenter-login autocomplete="off" aria-busy="${loginPending}">
+        <label for="presenter-password">Password</label>
+        <input id="presenter-password" name="password" type="password" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false" required ${loginError ? 'aria-invalid="true" aria-describedby="presenter-login-error"' : ''} ${loginPending ? 'disabled' : ''} />
+        ${loginError ? `<p class="presenter-login-error" id="presenter-login-error" role="alert">${icon('alert', 15)} ${escapeHtml(loginError)}</p>` : ''}
+        <button type="submit" ${loginPending ? 'disabled' : ''}>${loginPending ? 'Signing in…' : 'Open presenter controls'} ${icon('arrow', 18)}</button>
+      </form>
+    </section></main>
+  </div>`;
+  if (!loginPending) root.querySelector('#presenter-password')?.focus({ preventScroll: true });
 }
 
 function syncAudienceRoute() {
@@ -311,7 +347,7 @@ function renderEventLog(events, limit = 20) {
 }
 
 function presenterButton(action, label, options = {}) {
-  const disabled = Boolean(options.disabled || pendingAction || !presenterToken);
+  const disabled = Boolean(options.disabled || pendingAction);
   const primary = options.primary ? ' action-primary' : '';
   const live = options.live ? ' action-live' : '';
   const future = options.live && options.futureStep ? ' action-future' : '';
@@ -363,10 +399,9 @@ function renderPresenter(state, config, phoneCue) {
     <header class="presenter-topbar">${brand()}<div class="presenter-topbar-right"><span class="private-badge">${icon('eye', 15)} Private presenter view</span>${themeButton()}</div></header>
     <main class="presenter-main"><div class="presenter-heading"><div><p class="presenter-kicker">Live webinar control room</p><h1>Run Anthony’s fraud alert story</h1><p>Keep this tab private. Share the separate audience window in your webinar.</p></div><a class="open-audience" href="/bank" target="twilio-bank-audience">Open audience window ${icon('external', 16)}</a></div>
       <div class="presenter-grid"><div class="presenter-controls">
-        ${!presenterToken ? `<div class="connection-banner" role="alert">${icon('shield', 17)} Open your private Presenter URL with its token to enable controls.</div>` : ''}
         ${actionError ? `<div class="error-banner" role="alert">${icon('alert', 18)}<span>${escapeHtml(actionError)}</span><button type="button" data-dismiss-error aria-label="Dismiss error">×</button></div>` : ''}
         ${transportError ? `<div class="connection-banner" role="status">${icon('refresh', 17)} ${escapeHtml(transportError)}</div>` : ''}
-        <section class="current-scene${phoneCue ? ' current-scene-phone' : ''}${phoneCue?.key === pulsingPhoneCueKey ? ' current-scene-attention' : ''}"><div class="current-scene-copy"><span class="current-scene-label">On screen now</span><h2>${escapeHtml(scene.short)}</h2><p>${escapeHtml(scene.caption)}</p>${phoneCue ? `<div class="current-scene-phone-cue" role="status"><strong>${icon('phone', 16)} ${escapeHtml(phoneCue.label)}</strong><span>${escapeHtml(phoneCue.detail)}</span></div>` : ''}</div><div class="current-scene-side"><span class="step-index">${String(currentStepIndex + 1).padStart(2, '0')} / 09</span><div class="current-actions">${renderNextActions(state, config)}</div><button type="button" class="restart-story-button" data-action="reset" ${step === 'idle' && !state.events.length || pendingAction || !presenterToken ? 'disabled' : ''}>${icon('refresh', 14)} ${escapeHtml(pendingAction === 'reset' ? 'Restarting…' : 'Restart story')}</button></div></section>
+        <section class="current-scene${phoneCue ? ' current-scene-phone' : ''}${phoneCue?.key === pulsingPhoneCueKey ? ' current-scene-attention' : ''}"><div class="current-scene-copy"><span class="current-scene-label">On screen now</span><h2>${escapeHtml(scene.short)}</h2><p>${escapeHtml(scene.caption)}</p>${phoneCue ? `<div class="current-scene-phone-cue" role="status"><strong>${icon('phone', 16)} ${escapeHtml(phoneCue.label)}</strong><span>${escapeHtml(phoneCue.detail)}</span></div>` : ''}</div><div class="current-scene-side"><span class="step-index">${String(currentStepIndex + 1).padStart(2, '0')} / 09</span><div class="current-actions">${renderNextActions(state, config)}</div><button type="button" class="restart-story-button" data-action="reset" ${step === 'idle' && !state.events.length || pendingAction ? 'disabled' : ''}>${icon('refresh', 14)} ${escapeHtml(pendingAction === 'reset' ? 'Restarting…' : 'Restart story')}</button></div></section>
         <section class="control-group"><div class="group-heading"><span>01</span><div><h2>Set the scene</h2><p>The same charge drives both attempts.</p></div></div><div class="action-stack">${presenterButton('flagPurchase', 'Flag the $9,800.00 charge', { disabled: step !== 'idle', primary: step === 'idle', simulated: true })}</div></section>
         <section class="control-group"><div class="group-heading"><span>02</span><div><h2>The anonymous call</h2><p>Show what Anthony sees without caller identity.</p></div></div><div class="action-stack two-up">${presenterButton('showUnknownCall', 'Show unknown call', { disabled: step !== 'flagged', primary: step === 'flagged', simulated: true })}${presenterButton('ignoreUnknownCall', 'Anthony ignores it', { disabled: step !== 'unknownRinging', primary: step === 'unknownRinging', simulated: true })}</div></section>
         <section class="control-group"><div class="group-heading"><span>03</span><div><h2>Replay with context</h2><p>Send the rich alert, then escalate if there is no reply.</p></div></div><div class="action-stack">
@@ -403,22 +438,76 @@ async function loadSnapshot() {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     applySnapshot(await response.json());
   } catch (error) {
-    transportError = 'The local demo server is unavailable. Restart it and reload this tab.';
+    transportError = 'The demo server is unavailable. Reload this tab to try again.';
     root.innerHTML = `<div class="fatal-error"><h1>Couldn’t load the demo</h1><p>${escapeHtml(transportError)}</p><button type="button" onclick="location.reload()">Try again</button></div>`;
   }
 }
 
+async function checkPresenterSession() {
+  try {
+    const response = await fetch('/api/presenter/session', { cache: 'no-store', credentials: 'same-origin' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    presenterAuthenticated = (await response.json()).authenticated === true;
+  } catch (_) {
+    presenterAuthenticated = false;
+    loginError = 'Couldn’t check presenter access. Enter the password to try again.';
+  }
+  render();
+}
+
+async function loginPresenter(form) {
+  if (loginPending) return;
+  const input = form.elements.namedItem('password');
+  const password = input.value;
+  input.value = '';
+  loginPending = true;
+  loginError = '';
+  renderPresenterLogin();
+  try {
+    const response = await fetch('/api/presenter/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ password }),
+    });
+    if (response.status === 401) {
+      loginError = 'That password didn’t work. Try again.';
+      return;
+    }
+    if (!response.ok || (await response.json()).authenticated !== true) {
+      loginError = `Couldn’t sign in (HTTP ${response.status}). Try again.`;
+      return;
+    }
+    presenterAuthenticated = true;
+    actionError = '';
+    if (!snapshot) await loadSnapshot();
+  } catch (_) {
+    loginError = 'Couldn’t sign in. Check the connection and try again.';
+  } finally {
+    loginPending = false;
+    if (presenterAuthenticated) render();
+    else renderPresenterLogin();
+  }
+}
+
 async function runAction(action) {
-  if (pendingAction || !presenterToken) return;
+  if (pendingAction || !presenterAuthenticated) return;
   pendingAction = action;
   actionError = '';
   render();
   try {
     const response = await fetch('/api/action', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Presenter-Token': presenterToken },
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
       body: JSON.stringify({ action }),
     });
+    if (response.status === 401) {
+      presenterAuthenticated = false;
+      loginError = 'Your presenter session ended. Enter the password to continue.';
+      deferredPresenterFocus = null;
+      return;
+    }
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || `The action failed (HTTP ${response.status}).`);
     applySnapshot(data);
@@ -429,6 +518,13 @@ async function runAction(action) {
     render();
   }
 }
+
+root.addEventListener('submit', (event) => {
+  const form = event.target.closest('[data-presenter-login]');
+  if (!form) return;
+  event.preventDefault();
+  loginPresenter(form);
+});
 
 root.addEventListener('click', (event) => {
   const action = event.target.closest('[data-action]');
@@ -442,20 +538,27 @@ root.addEventListener('click', (event) => {
     const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
     document.documentElement.dataset.theme = next;
     try { localStorage.setItem('twilio-bank-theme-v2', next); } catch (_) {}
-    render();
+    if (isPresenter && presenterAuthenticated === false) {
+      const button = root.querySelector('[data-theme-toggle]');
+      if (button) { button.outerHTML = themeButton(); root.querySelector('[data-theme-toggle]')?.focus(); }
+    } else render();
   }
 });
 
 window.addEventListener('storage', (event) => {
   if (event.key === 'twilio-bank-theme-v2') {
     document.documentElement.dataset.theme = event.newValue || 'light';
-    render();
+    if (isPresenter && presenterAuthenticated === false) {
+      const button = root.querySelector('[data-theme-toggle]');
+      if (button) button.outerHTML = themeButton();
+    } else render();
   }
 });
 
 window.addEventListener('popstate', () => { syncAudienceRoute(); render(); });
 
-await loadSnapshot();
+if (isPresenter) await Promise.all([loadSnapshot(), checkPresenterSession()]);
+else await loadSnapshot();
 const stream = new EventSource('/api/events');
 stream.onmessage = (event) => {
   try { applySnapshot(JSON.parse(event.data)); } catch (_) {}

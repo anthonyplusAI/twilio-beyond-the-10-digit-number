@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { dirname, extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +15,7 @@ const SID = {
   call: /^CA[0-9a-f]{32}$/i,
 };
 const E164 = /^\+[1-9]\d{7,14}$/;
+const PRESENTER_SESSION_LIFETIME_MS = 8 * 60 * 60 * 1_000;
 const STEP_ACTIONS = {
   flagPurchase: 'idle',
   showUnknownCall: 'flagged',
@@ -49,13 +50,6 @@ class AppError extends Error {
     this.status = status;
     this.code = code;
   }
-}
-
-function isValidPresenterToken(value) {
-  return typeof value === 'string'
-    && /^[A-Za-z0-9_-]{43}$/.test(value)
-    && Buffer.from(value, 'base64url').length === 32
-    && Buffer.from(value, 'base64url').toString('base64url') === value;
 }
 
 function maskNumber(number) {
@@ -396,9 +390,9 @@ function json(res, status, value) {
   res.end(body);
 }
 
-async function readAction(req) {
+async function readJsonObject(req, purpose) {
   if (!req.headers['content-type']?.toLowerCase().startsWith('application/json')) {
-    throw new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', 'Send JSON for presenter actions.');
+    throw new AppError(415, 'UNSUPPORTED_MEDIA_TYPE', `Send JSON for ${purpose}.`);
   }
   const chunks = [];
   let length = 0;
@@ -408,13 +402,18 @@ async function readAction(req) {
     if (length > 8_192) tooLarge = true;
     if (!tooLarge) chunks.push(chunk);
   }
-  if (tooLarge) throw new AppError(413, 'BODY_TOO_LARGE', 'Presenter action body is too large.');
+  if (tooLarge) throw new AppError(413, 'BODY_TOO_LARGE', `${purpose} body is too large.`);
   let value;
   try {
     value = JSON.parse(Buffer.concat(chunks).toString('utf8'));
   } catch {
-    throw new AppError(400, 'INVALID_JSON', 'Presenter action must be valid JSON.');
+    throw new AppError(400, 'INVALID_JSON', `${purpose} must be valid JSON.`);
   }
+  return value;
+}
+
+async function readAction(req) {
+  const value = await readJsonObject(req, 'presenter action');
   if (!value || typeof value !== 'object' || Array.isArray(value) || typeof value.action !== 'string') {
     throw new AppError(400, 'INVALID_ACTION', 'Presenter action must contain an action name.');
   }
@@ -422,6 +421,27 @@ async function readAction(req) {
     throw new AppError(400, 'UNEXPECTED_FIELDS', 'Presenter actions cannot include a destination or other extra fields.');
   }
   return value.action;
+}
+
+async function readPresenterPassword(req) {
+  const value = await readJsonObject(req, 'presenter login');
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+    || typeof value.password !== 'string' || Object.keys(value).some((key) => key !== 'password')) {
+    throw new AppError(400, 'INVALID_LOGIN', 'Enter a presenter password.');
+  }
+  return value.password;
+}
+
+function presenterSessionCookie(req, name) {
+  const header = req.headers.cookie;
+  if (typeof header !== 'string') return '';
+  for (const pair of header.split(';')) {
+    const separator = pair.indexOf('=');
+    if (separator !== -1 && pair.slice(0, separator).trim() === name) {
+      return pair.slice(separator + 1).trim();
+    }
+  }
+  return '';
 }
 
 async function serveStatic(req, res, pathname, publicDir) {
@@ -474,14 +494,21 @@ export function createAppServer({ env = process.env, fetchImpl = fetch, publicDi
     && env.TWILIO_CONVERSATION_RELAY_URL !== resolveRelayUrl({ PUBLIC_BASE_URL: publicOrigin })) {
     throw new TypeError('TWILIO_CONVERSATION_RELAY_URL must match PUBLIC_BASE_URL/voice-relay in public deployment.');
   }
-  const suppliedToken = env.PRESENTER_TOKEN;
-  if ((suppliedToken !== undefined && suppliedToken !== '') || env.PUBLIC_BASE_URL) {
-    if (!isValidPresenterToken(suppliedToken)) {
-      throw new TypeError('PRESENTER_TOKEN must be a 32-byte base64url secret for public deployment.');
-    }
+  if (typeof env.PRESENTER_PASSWORD !== 'string' || !env.PRESENTER_PASSWORD.trim()) {
+    throw new TypeError('Set PRESENTER_PASSWORD to enable presenter login.');
   }
-  const presenterToken = suppliedToken || randomBytes(32).toString('base64url');
-  const presenterTokenBytes = Buffer.from(presenterToken);
+  const presenterPasswordHash = createHash('sha256').update(env.PRESENTER_PASSWORD).digest();
+  const presenterCookieName = publicOrigin ? '__Host-twilio_bank_presenter' : 'twilio_bank_presenter';
+  const presenterSessions = new Map();
+  const hasPresenterSession = (req) => {
+    const sessionId = presenterSessionCookie(req, presenterCookieName);
+    if (!/^[A-Za-z0-9_-]{43}$/.test(sessionId)) return false;
+    const expiresAt = presenterSessions.get(sessionId);
+    if (!expiresAt) return false;
+    if (expiresAt > Date.now()) return true;
+    presenterSessions.delete(sessionId);
+    return false;
+  };
   const clients = new Set();
   const broadcast = (value) => {
     const data = `data: ${JSON.stringify(value)}\n\n`;
@@ -512,6 +539,27 @@ export function createAppServer({ env = process.env, fetchImpl = fetch, publicDi
         throw new AppError(403, 'LOCAL_ORIGIN_REQUIRED', 'Open this demo from its configured URL.');
       }
       const pathname = new URL(req.url ?? '/', `http://${host}`).pathname;
+      if (pathname === '/api/presenter/session' && req.method === 'GET') {
+        json(res, 200, { authenticated: hasPresenterSession(req) });
+        return;
+      }
+      if (pathname === '/api/presenter/login' && req.method === 'POST') {
+        const expectedOrigin = publicRequest ? publicOrigin : `http://${host}`;
+        if (req.headers.origin && req.headers.origin !== expectedOrigin) {
+          throw new AppError(403, 'LOCAL_ORIGIN_REQUIRED', 'Presenter login must come from the demo origin.');
+        }
+        const password = await readPresenterPassword(req);
+        const attemptHash = createHash('sha256').update(password).digest();
+        if (!timingSafeEqual(attemptHash, presenterPasswordHash)) {
+          throw new AppError(401, 'PRESENTER_LOGIN_FAILED', 'Incorrect presenter password.');
+        }
+        const sessionId = randomBytes(32).toString('base64url');
+        presenterSessions.set(sessionId, Date.now() + PRESENTER_SESSION_LIFETIME_MS);
+        if (presenterSessions.size > 64) presenterSessions.delete(presenterSessions.keys().next().value);
+        res.setHeader('set-cookie', `${presenterCookieName}=${sessionId}; HttpOnly; SameSite=Strict; Path=/${publicOrigin ? '; Secure' : ''}`);
+        json(res, 200, { authenticated: true });
+        return;
+      }
       if (pathname === '/api/state' && req.method === 'GET') {
         json(res, 200, demo.snapshot());
         return;
@@ -539,10 +587,8 @@ export function createAppServer({ env = process.env, fetchImpl = fetch, publicDi
         if (req.headers.origin && req.headers.origin !== expectedOrigin) {
           throw new AppError(403, 'LOCAL_ORIGIN_REQUIRED', 'Presenter actions must come from the demo origin.');
         }
-        const suppliedToken = req.headers['x-presenter-token'];
-        const suppliedBytes = typeof suppliedToken === 'string' ? Buffer.from(suppliedToken) : Buffer.alloc(0);
-        if (suppliedBytes.length !== presenterTokenBytes.length || !timingSafeEqual(suppliedBytes, presenterTokenBytes)) {
-          throw new AppError(403, 'PRESENTER_FORBIDDEN', 'Open the private presenter URL printed by the local server.');
+        if (!hasPresenterSession(req)) {
+          throw new AppError(401, 'PRESENTER_AUTH_REQUIRED', 'Enter the presenter password to continue.');
         }
         const action = await readAction(req);
         json(res, 200, await demo.act(action));
@@ -571,6 +617,5 @@ export function createAppServer({ env = process.env, fetchImpl = fetch, publicDi
     }
   });
   attachVoiceRelay(server, { ...relayOptions, env });
-  Object.defineProperty(server, 'presenterToken', { value: presenterToken });
   return server;
 }

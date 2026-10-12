@@ -20,10 +20,11 @@ The Twilio Bank account, merchant, charge, and illustrated phone screens are fic
 
 You need Node.js 22 or newer. From this project folder, run:
 
+    cp .env.example .env
     npm install
     npm run dev
 
-Open the private **Presenter** URL printed in the terminal, then click **Open audience window** to see the customer view. Keep the presenter window private if you share your screen. No Twilio credentials are needed for the preview; **Show RCS preview** and **Show call preview** do not send anything.
+Set your own private `PRESENTER_PASSWORD` in `.env` before starting the server. Open the **Presenter** URL printed in the terminal, enter that password, then click **Open audience window** to see the customer view. Keep the presenter window private if you share your screen. No Twilio credentials are needed for the preview; **Show RCS preview** and **Show call preview** do not send anything.
 
 ## Follow the story
 
@@ -41,4 +42,4 @@ To configure real sends, rehearse device behavior, or operate the webinar, see t
 
 ## Hosting a webinar copy
 
-Presenters can host the app on Azure Container Apps so the site and live ConversationRelay endpoint share one HTTPS hostname. See the [deployment guide](docs/DEPLOYMENT.md), [one-time Azure setup](docs/INFRA_SETUP.md), and [CI checks](docs/CICD.md). Keep the token-bearing presenter URL private and share only the audience window. [Azure WebSocket ingress](https://learn.microsoft.com/en-us/azure/container-apps/ingress-overview) · [Twilio ConversationRelay onboarding](https://www.twilio.com/docs/voice/conversationrelay/onboarding)
+Presenters can host the app on Azure Container Apps so the site and live ConversationRelay endpoint share one HTTPS hostname. See the [deployment guide](docs/DEPLOYMENT.md), [one-time Azure setup](docs/INFRA_SETUP.md), and [CI checks](docs/CICD.md). Keep the presenter controls private and share only the audience window. [Azure WebSocket ingress](https://learn.microsoft.com/en-us/azure/container-apps/ingress-overview) · [Twilio ConversationRelay onboarding](https://www.twilio.com/docs/voice/conversationrelay/onboarding)

@@ -24,9 +24,7 @@ if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     server.listen(port, bindHost, () => {
       const baseUrl = publicMode ? new URL(process.env.PUBLIC_BASE_URL).origin : `http://127.0.0.1:${port}`;
       console.log(`Audience: ${baseUrl}/bank`);
-      console.log(publicMode
-        ? `Presenter: ${baseUrl}/presenter (use your private PRESENTER_TOKEN in the URL fragment)`
-        : `Presenter: ${baseUrl}/presenter#token=${server.presenterToken}`);
+      console.log(`Presenter: ${baseUrl}/presenter`);
       console.log(`Architecture: ${baseUrl}/architecture`);
       console.log(`Conversation Relay: ${resolveRelayUrl(process.env) ?? 'not configured'}`);
     });

@@ -222,6 +222,240 @@ test('signed relay has a real two-turn conversation with per-call history', asyn
   });
 });
 
+test('explicit spoken denial records an unrecognized decision before the agent replies', async () => {
+  const callSid = `CA${'1'.repeat(32)}`;
+  const decisions = [];
+  const prompts = [];
+  await withRelay(async (url) => {
+    const socket = signedSocket(url);
+    await once(socket, 'open');
+    try {
+      socket.send(JSON.stringify({
+        type: 'setup',
+        accountSid: env.TWILIO_ACCOUNT_SID,
+        callSid,
+        from: env.TWILIO_VOICE_FROM,
+        to: env.DEMO_TO_NUMBER,
+      }));
+
+      const reply = nextTalkCycle(socket);
+      socket.send(JSON.stringify({ type: 'prompt', voicePrompt: "No, I didn't make that purchase.", last: true }));
+      await reply;
+      assert.deepEqual(decisions, [{ callSid, decision: 'unrecognized' }]);
+      assert.match(prompts[0], /unrecognized/i);
+      assert.match(prompts[0], /recorded/i);
+    } finally {
+      socket.close();
+      await once(socket, 'close');
+    }
+  }, {
+    onDecision: async (outcome) => {
+      decisions.push(outcome);
+      return true;
+    },
+    streamReply: async function* ({ messages }) {
+      assert.equal(decisions.length, 1, 'record the decision before asking the model to reply');
+      prompts.push(messages.filter((message) => message.role === 'system').map((message) => message.content).join(' '));
+      yield 'I recorded that you do not recognize the charge.';
+    },
+  });
+});
+
+test('an explicit purchase admission records a recognized decision', async () => {
+  const callSid = `CA${'2'.repeat(32)}`;
+  const decisions = [];
+  await withRelay(async (url) => {
+    const socket = signedSocket(url);
+    await once(socket, 'open');
+    try {
+      socket.send(JSON.stringify({
+        type: 'setup',
+        accountSid: env.TWILIO_ACCOUNT_SID,
+        callSid,
+        from: env.TWILIO_VOICE_FROM,
+        to: env.DEMO_TO_NUMBER,
+      }));
+      const reply = nextTalkCycle(socket);
+      socket.send(JSON.stringify({ type: 'prompt', voicePrompt: 'I paid for that vehicle deposit.', last: true }));
+      await reply;
+      assert.deepEqual(decisions, [{ callSid, decision: 'recognized' }]);
+    } finally {
+      socket.close();
+      await once(socket, 'close');
+    }
+  }, {
+    onDecision: async (outcome) => {
+      decisions.push(outcome);
+      return true;
+    },
+    streamReply: async function* () { yield 'I recorded that you recognize the purchase.'; },
+  });
+});
+
+test('a pending decision prevents a later contradictory answer from replacing it', async () => {
+  const callSid = `CA${'3'.repeat(32)}`;
+  const decisions = [];
+  const prompts = [];
+  let releaseDecision;
+  let firstDecisionStarted;
+  const decisionGate = new Promise((resolve) => { releaseDecision = resolve; });
+  const firstDecision = new Promise((resolve) => { firstDecisionStarted = resolve; });
+  await withRelay(async (url) => {
+    const socket = signedSocket(url);
+    await once(socket, 'open');
+    try {
+      socket.send(JSON.stringify({
+        type: 'setup',
+        accountSid: env.TWILIO_ACCOUNT_SID,
+        callSid,
+        from: env.TWILIO_VOICE_FROM,
+        to: env.DEMO_TO_NUMBER,
+      }));
+      socket.send(JSON.stringify({ type: 'prompt', voicePrompt: "No, I didn't make it.", last: true }));
+      await firstDecision;
+
+      const reply = nextTalkCycle(socket);
+      socket.send(JSON.stringify({ type: 'prompt', voicePrompt: 'Yes, I did make it.', last: true }));
+      const pong = once(socket, 'pong');
+      socket.ping();
+      await pong;
+      assert.deepEqual(decisions, [{ callSid, decision: 'unrecognized' }]);
+
+      releaseDecision();
+      await reply;
+      assert.match(prompts[0], /unrecognized.*recorded/i);
+
+      const followUp = nextTalkCycle(socket);
+      socket.send(JSON.stringify({ type: 'prompt', voicePrompt: 'Yes, what should I do next?', last: true }));
+      await followUp;
+      assert.deepEqual(decisions, [{ callSid, decision: 'unrecognized' }]);
+    } finally {
+      releaseDecision();
+      socket.close();
+      await once(socket, 'close');
+    }
+  }, {
+    onDecision: async (outcome) => {
+      decisions.push(outcome);
+      firstDecisionStarted();
+      await decisionGate;
+      return true;
+    },
+    streamReply: async function* ({ messages }) {
+      prompts.push(messages.filter((message) => message.role === 'system').map((message) => message.content).join(' '));
+      yield 'I recorded your answer.';
+    },
+  });
+});
+
+test('an uncertain answer stays pending until the caller clearly denies the charge', async () => {
+  const callSid = `CA${'4'.repeat(32)}`;
+  const decisions = [];
+  await withRelay(async (url) => {
+    const socket = signedSocket(url);
+    await once(socket, 'open');
+    try {
+      socket.send(JSON.stringify({
+        type: 'setup',
+        accountSid: env.TWILIO_ACCOUNT_SID,
+        callSid,
+        from: env.TWILIO_VOICE_FROM,
+        to: env.DEMO_TO_NUMBER,
+      }));
+      const uncertainReply = nextTalkCycle(socket);
+      socket.send(JSON.stringify({ type: 'prompt', voicePrompt: "No, wait, I'm not sure yet.", last: true }));
+      await uncertainReply;
+      assert.deepEqual(decisions, []);
+
+      const clearReply = nextTalkCycle(socket);
+      socket.send(JSON.stringify({ type: 'prompt', voicePrompt: 'I did not authorize that deposit.', last: true }));
+      await clearReply;
+      assert.deepEqual(decisions, [{ callSid, decision: 'unrecognized' }]);
+    } finally {
+      socket.close();
+      await once(socket, 'close');
+    }
+  }, {
+    onDecision: async (outcome) => {
+      decisions.push(outcome);
+      return true;
+    },
+    streamReply: async function* () { yield 'Please clarify whether you recognize the charge.'; },
+  });
+});
+
+test('a request to repeat the amount does not count as a spoken denial', async () => {
+  const callSid = `CA${'5'.repeat(32)}`;
+  const decisions = [];
+  await withRelay(async (url) => {
+    const socket = signedSocket(url);
+    await once(socket, 'open');
+    try {
+      socket.send(JSON.stringify({
+        type: 'setup',
+        accountSid: env.TWILIO_ACCOUNT_SID,
+        callSid,
+        from: env.TWILIO_VOICE_FROM,
+        to: env.DEMO_TO_NUMBER,
+      }));
+      const repeatReply = nextTalkCycle(socket);
+      socket.send(JSON.stringify({ type: 'prompt', voicePrompt: 'No, can you repeat the amount?', last: true }));
+      await repeatReply;
+      assert.deepEqual(decisions, []);
+
+      const denialReply = nextTalkCycle(socket);
+      socket.send(JSON.stringify({ type: 'prompt', voicePrompt: 'No, I do not recognize that charge.', last: true }));
+      await denialReply;
+      assert.deepEqual(decisions, [{ callSid, decision: 'unrecognized' }]);
+    } finally {
+      socket.close();
+      await once(socket, 'close');
+    }
+  }, {
+    onDecision: async (outcome) => {
+      decisions.push(outcome);
+      return true;
+    },
+    streamReply: async function* () { yield 'I can repeat the amount before you decide.'; },
+  });
+});
+
+test('standalone yes and no remain valid answers to the charge question', async () => {
+  const cases = [
+    { callSid: `CA${'6'.repeat(32)}`, speech: 'No.', decision: 'unrecognized' },
+    { callSid: `CA${'7'.repeat(32)}`, speech: 'Yes!', decision: 'recognized' },
+  ];
+  const decisions = [];
+  await withRelay(async (url) => {
+    for (const item of cases) {
+      const socket = signedSocket(url);
+      await once(socket, 'open');
+      try {
+        socket.send(JSON.stringify({
+          type: 'setup',
+          accountSid: env.TWILIO_ACCOUNT_SID,
+          callSid: item.callSid,
+          from: env.TWILIO_VOICE_FROM,
+          to: env.DEMO_TO_NUMBER,
+        }));
+        const reply = nextTalkCycle(socket);
+        socket.send(JSON.stringify({ type: 'prompt', voicePrompt: item.speech, last: true }));
+        await reply;
+      } finally {
+        socket.close();
+        await once(socket, 'close');
+      }
+    }
+  }, {
+    onDecision: async (outcome) => {
+      decisions.push(outcome);
+      return true;
+    },
+    streamReply: async function* () { yield 'I recorded your answer.'; },
+  });
+  assert.deepEqual(decisions, cases.map(({ callSid, decision }) => ({ callSid, decision })));
+});
+
 test('an interruption keeps only the words the caller actually heard in agent history', async () => {
   const turns = [];
   await withRelay(async (url) => {

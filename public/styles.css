@@ -125,7 +125,14 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
 .fraud-reached .fraud-status { color: var(--success-text); background: var(--success-inset); border-color: var(--success-line); }
 .fraud-content h2 { margin: 11px 0 5px; font-size: 20px; font-weight: 800; letter-spacing: -0.03em; }
 .fraud-reached .fraud-content h2 { color: var(--success-text); }
+.fraud-unrecognized .fraud-content h2 { color: var(--text); }
 .fraud-content p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.45; }
+.fraud-unrecognized .fraud-content > p { color: var(--text); font-weight: 700; }
+.fraud-answer { display: grid; gap: 4px; margin-top: 16px; padding: 12px 14px; border: 1px solid var(--success-line); border-radius: 10px; background: var(--success-inset); }
+.fraud-answer > span { color: var(--muted); font-size: 10px; font-weight: 700; }
+.fraud-answer strong { font-size: 14px; line-height: 1.35; }
+.fraud-answer small { color: var(--muted); font-size: 11px; }
+.fraud-answer-review { border-color: var(--red-line); border-left: 4px solid var(--red); background: var(--red-soft); }
 .purchase-detail { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 17px; padding: 13px 15px; border-radius: 11px; background: var(--surface-raised); }
 .fraud-reached .purchase-detail { background: var(--success-inset); border: 1px solid var(--success-line); }
 .purchase-detail > div { display: grid; gap: 3px; }
@@ -204,6 +211,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
 .voice-agent-step strong { font-size: 13px; line-height: 1.2; }
 .voice-agent-step span { color: var(--muted); font-size: 12px; line-height: 1.35; }
 .voice-agent-arrow { align-self: center; color: var(--subtle); font-size: 20px; text-align: center; }
+.voice-result-path { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 11px 13px; border: 1px solid var(--success-line); border-radius: 9px; background: var(--success-soft); }
+.voice-result-path > span { flex: none; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: var(--success-text); background: var(--success-inset); }
+.voice-result-path > div { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.voice-result-path strong { color: var(--success-text); font-size: 12px; }
+.voice-result-path small { color: var(--text); font-size: 11px; line-height: 1.35; }
+.voice-result-path em { color: var(--success-text); font-size: 10px; font-style: normal; font-weight: 800; text-align: right; }
 .flow-note { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding-top: 18px; margin-top: 18px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
 .flow-note > span, .flow-note a, .identity-item a { display: inline-flex; align-items: center; gap: 7px; }
 .flow-note a, .identity-item a { color: var(--blue); text-decoration: none; font-weight: 700; }
@@ -286,6 +299,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
 .current-scene-phone-cue span { color: var(--text); font-size: 11px; line-height: 1.45; }
 .current-scene-side { width: 198px; flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
 .current-actions { display: grid; width: 100%; gap: 6px; }
+.voice-awaiting { display: block; padding: 8px 9px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--muted); font-size: 10px; line-height: 1.4; }
 .current-actions .action-button { min-height: 36px; padding: 7px 10px; }
 .restart-story-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 29px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--muted); font-size: 11px; font-weight: 700; cursor: pointer; }
 .restart-story-button:hover:not(:disabled) { border-color: var(--subtle); color: var(--text); }
@@ -303,6 +317,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
 .call-preview-copy { display: grid; gap: 3px; }
 .call-preview-copy strong { font-size: 12px; }
 .call-preview-copy small { color: var(--muted); font-size: 11px; line-height: 1.4; }
+.decision-manual { display: grid; gap: 9px; padding: 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-soft); }
+.decision-manual p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
 .action-button { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; text-align: left; padding: 9px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-raised); color: var(--text); font-size: 12px; font-weight: 700; cursor: pointer; transition: border-color 130ms, background 130ms; }
 .action-button-label { display: grid; gap: 3px; min-width: 0; }
 .action-button-label small { font-size: 10px; font-weight: 600; line-height: 1.25; }
@@ -410,6 +426,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
   .voice-agent-path-heading { align-items: flex-start; flex-direction: column; gap: 6px; }
   .voice-agent-steps { grid-template-columns: minmax(0, 1fr); }
   .voice-agent-arrow { display: none; }
+  .voice-result-path { flex-wrap: wrap; }
+  .voice-result-path em { width: 100%; text-align: left; }
   .flow-note { align-items: flex-start; flex-direction: column; }
   .identity-grid { grid-template-columns: 1fr; gap: 14px; }
   .identity-item { border-right: 0; border-bottom: 1px solid var(--line); padding-bottom: 14px; }
@@ -425,6 +443,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
   .current-scene { position: static; flex-direction: column; }
   .current-scene-side { width: 100%; align-items: stretch; }
   .current-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .voice-awaiting { grid-column: 1 / -1; }
   .current-actions .action-button:only-child { grid-column: 1 / -1; }
   .presenter-sidebar { grid-template-columns: minmax(0, 1fr); }
   .action-stack.two-up { grid-template-columns: minmax(0, 1fr); }

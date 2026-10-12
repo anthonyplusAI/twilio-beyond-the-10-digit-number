@@ -407,6 +407,53 @@ async function toRewound(base) {
   }
 }
 
+async function toCallPreview(base) {
+  await toRewound(base);
+  for (const name of ['previewRcs', 'markNoResponse', 'previewBrandedCall']) {
+    const result = await action(base, name);
+    assert.equal(result.status, 200, `${name}: ${JSON.stringify(result.body)}`);
+  }
+}
+
+async function openSignedRelay(base, callSid) {
+  const socket = new WebSocket(`${base.replace(/^http/, 'ws')}/voice-relay`, {
+    headers: {
+      'X-Twilio-Signature': twilio.getExpectedTwilioSignature(
+        liveEnv.TWILIO_AUTH_TOKEN,
+        liveEnv.TWILIO_CONVERSATION_RELAY_URL,
+        {},
+      ),
+    },
+  });
+  await once(socket, 'open');
+  socket.send(JSON.stringify({
+    type: 'setup',
+    accountSid: ACCOUNT_SID,
+    callSid,
+    from: liveEnv.TWILIO_VOICE_FROM,
+    to: liveEnv.DEMO_TO_NUMBER,
+  }));
+  return socket;
+}
+
+function relayReply(socket, voicePrompt) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      socket.off('message', onMessage);
+      reject(new Error('Timed out waiting for ConversationRelay reply.'));
+    }, 3_000);
+    const onMessage = (raw) => {
+      const message = JSON.parse(raw.toString());
+      if (message.type !== 'text' || message.last !== true) return;
+      clearTimeout(timer);
+      socket.off('message', onMessage);
+      resolve();
+    };
+    socket.on('message', onMessage);
+    socket.send(JSON.stringify({ type: 'prompt', voicePrompt, last: true }));
+  });
+}
+
 test('simulated fraud alert journey advances only on explicit actions and reset clears it', async () => {
   await withServer(async (base) => {
     const initial = await snapshot(base);
@@ -433,8 +480,10 @@ test('simulated fraud alert journey advances only on explicit actions and reset 
     assert.equal(result.status, 200);
     assert.equal(result.body.state.callPreviewDevice, 'android');
     assert.equal(result.body.state.step, 'brandedRinging');
-    result = await action(base, 'markReached');
+    result = await action(base, 'reportUnrecognized');
     assert.equal(result.body.state.step, 'reached');
+    assert.equal(result.body.state.chargeDecision, 'unrecognized');
+    assert.equal(result.body.state.decisionSource, 'presenter');
     assert.equal(result.body.state.callPreviewDevice, 'android');
     assert.ok(result.body.state.events.some((event) => event.kind === 'simulated'));
 
@@ -449,13 +498,27 @@ test('simulated fraud alert journey advances only on explicit actions and reset 
     assert.equal(result.body.state.step, 'idle');
     assert.equal(result.body.state.audienceView, 'bank');
     assert.equal(result.body.state.callPreviewDevice, 'iphone');
+    assert.equal(result.body.state.chargeDecision, null);
+    assert.equal(result.body.state.decisionSource, null);
     assert.deepEqual(result.body.state.events, []);
+  });
+});
+
+test('presenter can preview a recognized charge without claiming it came from live speech', async () => {
+  await withServer(async (base) => {
+    await toCallPreview(base);
+    const result = await action(base, 'confirmPurchase');
+    assert.equal(result.status, 200);
+    assert.equal(result.body.state.step, 'reached');
+    assert.equal(result.body.state.chargeDecision, 'recognized');
+    assert.equal(result.body.state.decisionSource, 'presenter');
+    assert.equal(result.body.state.events.at(-1).kind, 'simulated');
   });
 });
 
 test('invalid transitions and client-supplied destinations are rejected without changing state', async () => {
   await withServer(async (base) => {
-    let result = await action(base, 'markReached');
+    let result = await action(base, 'reportUnrecognized');
     assert.equal(result.status, 409);
     assert.equal(result.body.code, 'INVALID_TRANSITION');
 
@@ -634,6 +697,59 @@ test('real call uses the approved caller number and connects to an ElevenLabs vo
     assert.match(form.get('Twiml'), /Twilio Bank virtual assistant/);
     assert.doesNotMatch(form.get('Twiml'), /<Say>/);
   }, { env: liveEnv, fetchImpl });
+});
+
+test('only the active signed call can record Anthony’s spoken answer and update the audience stream', { timeout: 6_000 }, async () => {
+  const fetchImpl = async (url) => {
+    assert.match(url, /\/Calls\.json$/);
+    return new Response(JSON.stringify({ sid: CALL_SID, status: 'queued', to: liveEnv.DEMO_TO_NUMBER }), { status: 201 });
+  };
+  await withServer(async (base) => {
+    await toRewound(base);
+    await action(base, 'previewRcs');
+    await action(base, 'markNoResponse');
+    assert.equal((await action(base, 'placeCall')).status, 200);
+
+    const stream = await fetch(`${base}/api/events`);
+    const reader = stream.body.getReader();
+    const decoder = new TextDecoder();
+    const readUntil = async (pattern) => {
+      let received = '';
+      while (!pattern.test(received)) {
+        const chunk = await reader.read();
+        assert.equal(chunk.done, false);
+        received += decoder.decode(chunk.value, { stream: true });
+      }
+      return received;
+    };
+    try {
+      assert.match(await readUntil(/"step":"brandedRinging"/), /"chargeDecision":null/);
+
+      const stale = await openSignedRelay(base, `CA${'d'.repeat(32)}`);
+      await relayReply(stale, 'No, I did not make that purchase.');
+      assert.equal((await snapshot(base)).state.chargeDecision, null);
+      stale.close();
+      await once(stale, 'close');
+
+      const live = await openSignedRelay(base, CALL_SID);
+      const broadcast = readUntil(/"chargeDecision":"unrecognized"/);
+      await relayReply(live, 'No, I did not make that purchase.');
+      assert.match(await broadcast, /"decisionSource":"voice"/);
+      const current = await snapshot(base);
+      assert.equal(current.state.step, 'reached');
+      assert.equal(current.state.chargeDecision, 'unrecognized');
+      assert.equal(current.state.decisionSource, 'voice');
+      assert.equal(current.state.events.at(-1).kind, 'real');
+      live.close();
+      await once(live, 'close');
+    } finally {
+      await reader.cancel();
+    }
+  }, {
+    env: liveEnv,
+    fetchImpl,
+    relayOptions: { streamReply: async function* () { yield 'I recorded your answer on the demo bank alert.'; } },
+  });
 });
 
 test('refreshStatuses polls only recorded live SIDs and updates delivery separately from API acceptance', async () => {

@@ -26,7 +26,8 @@ const STEP_ACTIONS = {
   markNoResponse: 'rcsSent',
   previewBrandedCall: 'noResponse',
   placeCall: 'noResponse',
-  markReached: 'brandedRinging',
+  confirmPurchase: 'brandedRinging',
+  reportUnrecognized: 'brandedRinging',
 };
 const ALWAYS_ACTIONS = new Set(['showArchitecture', 'showBank', 'refreshStatuses', 'reset']);
 const CALL_PREVIEW_ACTIONS = new Set(['showAndroidReasonExample', 'showIphoneCallExample']);
@@ -86,6 +87,8 @@ function freshState() {
     callPreviewDevice: 'iphone',
     messageSid: null,
     callSid: null,
+    chargeDecision: null,
+    decisionSource: null,
     messageStatus: null,
     callStatus: null,
     events: [],
@@ -188,6 +191,20 @@ function createDemo(env, fetchImpl, broadcast) {
     return snapshot();
   }
 
+  function recordDecision({ callSid, decision } = {}) {
+    if (state.step !== 'brandedRinging'
+      || state.callMode !== 'live'
+      || state.callSid !== callSid
+      || !['recognized', 'unrecognized'].includes(decision)) return false;
+
+    publish({ step: 'reached', chargeDecision: decision, decisionSource: 'voice' }, {
+      kind: 'real',
+      title: decision === 'recognized' ? 'Customer confirmed the purchase by voice' : 'Customer reported the purchase as unrecognized by voice',
+      detail: 'The live call recorded Anthony’s answer in the fictional banking app; no real account action was taken.',
+    });
+    return true;
+  }
+
   async function act(action) {
     if (inFlight) {
       throw new AppError(409, 'ACTION_IN_PROGRESS', 'Wait for the current action to finish.');
@@ -232,6 +249,8 @@ function createDemo(env, fetchImpl, broadcast) {
             callPreviewDevice: 'iphone',
             messageSid: null,
             callSid: null,
+            chargeDecision: null,
+            decisionSource: null,
             messageStatus: null,
             callStatus: null,
           }, {
@@ -291,12 +310,15 @@ function createDemo(env, fetchImpl, broadcast) {
             detail: `Call ${result.sid}; status ${result.status ?? 'unknown'}. On-device branding depends on device and carrier support.`,
           });
         }
-        case 'markReached':
-          return publish({ step: 'reached' }, {
+        case 'confirmPurchase':
+        case 'reportUnrecognized': {
+          const decision = action === 'confirmPurchase' ? 'recognized' : 'unrecognized';
+          return publish({ step: 'reached', chargeDecision: decision, decisionSource: 'presenter' }, {
             kind: 'simulated',
-            title: 'Customer reached in the story',
-            detail: 'Presenter confirms the scenario outcome; a completed call alone does not prove a person answered.',
+            title: decision === 'recognized' ? 'Presenter marked purchase as recognized' : 'Presenter marked purchase as unrecognized',
+            detail: 'Presenter selected this story outcome; it was not captured from the live call.',
           });
+        }
         case 'showAndroidReasonExample':
           return state.callPreviewDevice === 'android' ? snapshot() : publish({ callPreviewDevice: 'android' });
         case 'showIphoneCallExample':
@@ -376,7 +398,7 @@ function createDemo(env, fetchImpl, broadcast) {
     }
   }
 
-  return { snapshot, act };
+  return { snapshot, act, recordDecision };
 }
 
 function json(res, status, value) {
@@ -616,6 +638,6 @@ export function createAppServer({ env = process.env, fetchImpl = fetch, publicDi
       }
     }
   });
-  attachVoiceRelay(server, { ...relayOptions, env });
+  attachVoiceRelay(server, { ...relayOptions, env, onDecision: demo.recordDecision });
   return server;
 }

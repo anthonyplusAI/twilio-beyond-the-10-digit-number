@@ -2,12 +2,12 @@
 
 The presenter site, customer banking view, API, and ConversationRelay WebSocket share one Node server on port 8080. Azure Container Apps gives that server one public HTTPS hostname and supports WebSocket upgrades. This demo's voice URL is `wss://twilio-branded-comms.jollymushroom-29e673c9.centralus.azurecontainerapps.io/voice-relay`. [Azure ingress](https://learn.microsoft.com/en-us/azure/container-apps/ingress-overview) · [Twilio ConversationRelay onboarding](https://www.twilio.com/docs/voice/conversationrelay/onboarding)
 
-## First deployment
+## Deploy or redeploy
 
-1. Complete the [one-time Azure and GitHub setup](INFRA_SETUP.md). The application must already exist with external ingress on port 8080, a stable `PRESENTER_TOKEN`, and `PUBLIC_BASE_URL=https://<app-fqdn>`.
+1. The [one-time Azure and GitHub setup](INFRA_SETUP.md) has been completed for this repo. If rebuilding the infrastructure, configure external ingress on port 8080, a stable `PRESENTER_TOKEN`, and `PUBLIC_BASE_URL=https://<app-fqdn>` first.
 2. Push to `main`, or run `gh workflow run deploy.yml --ref main`. Follow the run with `gh run watch --exit-status` or in GitHub Actions.
-3. Confirm `https://<app-fqdn>/healthz` returns HTTP 200. Open `https://<app-fqdn>/bank` in the audience window. Open `https://<app-fqdn>/presenter#token=<your-saved-token>` in a separate, private window.
-4. Add the live Twilio and OpenAI values to the Container App as described in [live demo settings](INFRA_SETUP.md#live-demo-settings). The app can run the simulated story before those values are present.
+3. Confirm `https://<app-fqdn>/healthz` returns HTTP 200. Open `https://<app-fqdn>/bank` in the audience window. Open `https://<app-fqdn>/presenter#token=<your-saved-token>` in a separate, private window. The token is saved in local `.env` and is not printed by the hosted server.
+4. Confirm the presenter view shows the RCS and voice features as ready. If a feature is missing, set its [live demo values](INFRA_SETUP.md#live-demo-settings) on the Container App before rehearsing.
 
 The Container App hostname also serves `/rcs-sender-logo.png`, `/rcs-sender-banner.png`, and `/rcs-alert-card.png` as stable public HTTPS assets for the RCS test setup. An RCS Sender still needs its normal Twilio onboarding and accepted test device. [Twilio RCS onboarding](https://www.twilio.com/docs/rcs/onboarding)
 

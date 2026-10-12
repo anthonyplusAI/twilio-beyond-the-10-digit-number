@@ -49,7 +49,7 @@ az containerapp registry set --name "$AZ_CONTAINER_APP" --resource-group "$AZ_RE
 
 ## 3. Give GitHub an OIDC deploy identity
 
-This user-assigned Azure identity trusts only this repository's `main` branch. It can push images to this registry and update this specific Container App. GitHub stores its client, tenant, and subscription **IDs**, with no Azure password or client secret. [Federated credential CLI](https://learn.microsoft.com/en-us/cli/azure/identity/federated-credential?view=azure-cli-latest) · [Azure Login OIDC](https://github.com/Azure/login) · [Container Apps Contributor role](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/containers#container-apps-contributor)
+This user-assigned Azure identity trusts only this repository's `main` branch. It can push images to this registry and update this specific Container App. GitHub stores its client, tenant, and subscription **IDs**, with no Azure password or client secret. This repo uses GitHub's immutable OIDC subject, which includes numeric owner and repo IDs, so read its exact prefix before creating the Azure trust. [GitHub OIDC subject format](https://docs.github.com/en/actions/reference/security/oidc#immutable-subject-claims) · [Federated credential CLI](https://learn.microsoft.com/en-us/cli/azure/identity/federated-credential?view=azure-cli-latest) · [Azure Login OIDC](https://github.com/Azure/login) · [Container Apps Contributor role](https://learn.microsoft.com/en-us/azure/role-based-access-control/built-in-roles/containers#container-apps-contributor)
 
 ```bash
 az identity create --name "$AZ_DEPLOY_IDENTITY" --resource-group "$AZ_RESOURCE_GROUP" --location "$AZ_REGION" --tags "${AZ_TAGS[@]}" --output none
@@ -58,8 +58,10 @@ AZ_DEPLOY_PRINCIPAL_ID=$(az identity show --name "$AZ_DEPLOY_IDENTITY" --resourc
 AZ_CONTAINER_APP_ID=$(az containerapp show --name "$AZ_CONTAINER_APP" --resource-group "$AZ_RESOURCE_GROUP" --query id --output tsv)
 AZ_SUBSCRIPTION_ID=$(az account show --query id --output tsv)
 AZ_TENANT_ID=$(az account show --query tenantId --output tsv)
+GH_OIDC_PREFIX=$(gh api "repos/${GH_REPO}/actions/oidc/customization/sub" --jq '.sub_claim_prefix // empty')
+if [ -z "$GH_OIDC_PREFIX" ]; then GH_OIDC_PREFIX="repo:${GH_REPO}"; fi
 
-az identity federated-credential create --name github-main --identity-name "$AZ_DEPLOY_IDENTITY" --resource-group "$AZ_RESOURCE_GROUP" --issuer https://token.actions.githubusercontent.com --subject "repo:${GH_REPO}:ref:refs/heads/main" --audiences api://AzureADTokenExchange --output none
+az identity federated-credential create --name github-main --identity-name "$AZ_DEPLOY_IDENTITY" --resource-group "$AZ_RESOURCE_GROUP" --issuer https://token.actions.githubusercontent.com --subject "${GH_OIDC_PREFIX}:ref:refs/heads/main" --audiences api://AzureADTokenExchange --output none
 az role assignment create --assignee-object-id "$AZ_DEPLOY_PRINCIPAL_ID" --assignee-principal-type ServicePrincipal --role AcrPush --scope "$AZ_ACR_ID" --output none
 az role assignment create --assignee-object-id "$AZ_DEPLOY_PRINCIPAL_ID" --assignee-principal-type ServicePrincipal --role 'Container Apps Contributor' --scope "$AZ_CONTAINER_APP_ID" --output none
 

@@ -173,6 +173,11 @@
 }
 
 .phone-screen-lock::before { content: ''; position: absolute; width: 420px; height: 420px; top: 33%; left: -70px; border-radius: 47% 53% 51% 49%; transform: rotate(-30deg); background: linear-gradient(135deg, rgba(206,134,179,.12), rgba(219,210,239,.46) 40%, rgba(76,65,130,.13) 73%); filter: blur(3px); }
+.phone-screen-android-lock { border-radius: 37px; }
+.phone-screen-android-lock .phone-android-status > span:first-child { visibility: hidden; }
+.phone-screen-android-lock .phone-lock-content { padding-top: 31px; }
+.phone-screen-android-lock .phone-lock-time { font-size: 84px; }
+.phone-screen-android-lock .phone-notification { margin-top: 43px; }
 .phone-lock-content { position: relative; display: flex; flex-direction: column; align-items: center; z-index: 1; padding: 22px 22px 0; }
 .phone-lock-icon { height: 27px; opacity: .93; }
 .phone-lock-icon .phone-icon { width: 17px; height: 17px; stroke-width: 2.5; }
@@ -183,6 +188,10 @@
 .phone-notification-app { display: flex; align-items: center; gap: 5px; font-weight: 650; }
 .phone-notification-app .phone-icon { width: 13px; height: 13px; stroke-width: 2.4; }
 .phone-notification strong { font-weight: 650; }
+.phone-notification-text { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.phone-notification-rcs-sender { display: flex; align-items: center; gap: 8px; min-width: 0; margin-bottom: 4px; }
+.phone-notification-rcs-sender img { flex: 0 0 26px; width: 26px; height: 26px; border-radius: 50%; object-fit: cover; }
+.phone-notification-rcs-sender strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .phone-lock-shortcuts { position: absolute; left: 40px; right: 40px; bottom: 47px; display: flex; justify-content: space-between; z-index: 1; }
 .phone-lock-shortcuts span { display: grid; place-items: center; width: 43px; height: 43px; border-radius: 50%; background: rgba(27,30,47,.43); backdrop-filter: blur(8px); }
 .phone-lock-shortcuts .phone-icon { width: 20px; height: 20px; }

@@ -63,6 +63,8 @@ test('RCS chat offers the sender profile from an Android-style header', () => {
   assert.match(chat, /<button[^>]*data-rcs-profile-open[^>]*>/);
   assert.match(chat, /src="\/rcs-sender-logo\.png"/);
   assert.match(chat, /<button[^>]*data-rcs-profile-open[^>]*>[\s\S]*?Twilio Bank[\s\S]*?<\/button>/);
+  assert.match(chat, /phone-rcs-verified-mark/);
+  assert.match(chat, /Verified business/);
   assert.doesNotMatch(chat, /data-rcs-profile-back/);
 });
 
@@ -82,6 +84,8 @@ test('RCS sender Info profile shows brand assets and contact details with a back
   assert.match(profile, /src="\/rcs-sender-banner\.png"/);
   assert.match(profile, /src="\/rcs-sender-logo\.png"/);
   assert.match(profile, /Twilio Bank/);
+  assert.match(profile, /phone-rcs-verified-mark/);
+  assert.match(profile, /Verified business/);
   assert.match(profile, /Card security alerts and account updates from Twilio Bank\./);
   assert.match(profile, /data-rcs-profile-tab="info"[^>]*aria-selected="true"/);
   assert.match(profile, /data-rcs-profile-tab="options"[^>]*aria-selected="false"/);
@@ -115,6 +119,7 @@ test('sender profile is unavailable on first SMS and RCS SMS fallback', () => {
     const phone = renderPhone(state, {}, { rcsProfileTab: 'info' });
     assert.doesNotMatch(phone, /data-rcs-profile-open|data-rcs-profile-back|data-rcs-profile-tab/);
     assert.doesNotMatch(phone, /phone-screen-rcs-profile|phone-device-android/);
+    assert.doesNotMatch(phone, /phone-rcs-verified-mark|Verified business/);
     assert.match(phone, /phone-status-dark/);
   }
 });

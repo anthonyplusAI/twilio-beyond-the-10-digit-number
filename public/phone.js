@@ -3,16 +3,18 @@
  * RCS sender fields and Android rich-card layout:
  * https://www.twilio.com/docs/rcs/onboarding
  * https://www.twilio.com/docs/content/twiliocard
+ * Verified sender badge on an invited test device:
+ * https://www.twilio.com/en-us/blog/get-started-rcs-twilio
  * Enhanced Branded Calling iPhone elements: https://www.twilio.com/docs/voice/branded-calling/us-enhanced
  */
 
 const visibleSteps = new Set([
-  'unknownRinging',
-  'unknownMissed',
   'smsSent',
   'smsIgnored',
   'rcsSent',
   'noResponse',
+  'unknownRinging',
+  'unknownMissed',
   'brandedRinging',
   'reached',
 ]);
@@ -49,6 +51,7 @@ const icon = (name, extraClass = '') => {
 };
 
 const brandMark = () => '<img class="phone-twilio-mark" src="/twilio-bug.svg" alt="" aria-hidden="true" />';
+const rcsVerifiedMark = () => `<span class="phone-rcs-verified-mark" aria-hidden="true">${icon('check')}</span>`;
 
 const statusBar = (tone = 'light') => `
   <div class="phone-status phone-status-${tone}" aria-hidden="true">
@@ -149,9 +152,9 @@ const rcsMessageScreen = () => `
     ${androidStatusBar('dark')}
     <div class="phone-rcs-chat-nav">
       <span class="phone-rcs-chat-back" aria-hidden="true">${icon('arrowLeft')}</span>
-      <button class="phone-rcs-chat-sender" type="button" data-rcs-profile-open aria-label="View Twilio Bank business profile">
+      <button class="phone-rcs-chat-sender" type="button" data-rcs-profile-open aria-label="View verified Twilio Bank business profile">
         <img class="phone-rcs-chat-logo" src="/rcs-sender-logo.png" alt="" />
-        <span class="phone-rcs-chat-sender-name"><strong>Twilio Bank</strong><small>RCS chat</small></span>
+        <span class="phone-rcs-chat-sender-name"><span class="phone-rcs-chat-sender-title"><strong>Twilio Bank</strong>${rcsVerifiedMark()}</span><small>Verified business</small></span>
       </button>
       <span class="phone-rcs-chat-more" aria-hidden="true">${icon('moreVertical')}</span>
     </div>
@@ -182,7 +185,8 @@ const rcsProfileScreen = (tab) => `
       <div class="phone-rcs-profile-banner"><img src="/rcs-sender-banner.png" alt="" aria-hidden="true" /></div>
       <div class="phone-rcs-profile-identity">
         <img class="phone-rcs-profile-logo" src="/rcs-sender-logo.png" alt="Twilio Bank logo" />
-        <h2>Twilio Bank</h2>
+        <div class="phone-rcs-profile-title"><h2>Twilio Bank</h2>${rcsVerifiedMark()}</div>
+        <span class="phone-rcs-profile-verified">Verified business</span>
         <p>Card security alerts and account updates from Twilio Bank.</p>
       </div>
       <div class="phone-rcs-profile-shortcuts" aria-label="Contact options shown for this sender">
@@ -330,6 +334,7 @@ export function renderPhone(state = {}, config = {}, { rcsProfileTab = null } = 
           : 'Simulated RCS example · live channel unconfirmed';
   const caption = activeRcsProfileTab ? 'Simulated RCS business profile'
     : brandedCall ? androidPreview ? 'Simulated Android 14+ · example reason' : 'Simulated iPhone call · name and logo only'
+      : step === 'unknownRinging' || step === 'unknownMissed' ? 'Simulated unbranded call · no call placed'
       : messageCaption;
   const screen = step === 'unknownRinging' ? incomingCall(false)
     : step === 'unknownMissed' ? missedCall()

@@ -18,16 +18,16 @@ const E164 = /^\+[1-9]\d{7,14}$/;
 const PRESENTER_SESSION_LIFETIME_MS = 8 * 60 * 60 * 1_000;
 const STEP_ACTIONS = {
   flagPurchase: 'idle',
-  showUnknownCall: 'flagged',
-  ignoreUnknownCall: 'unknownRinging',
-  previewSms: 'unknownMissed',
-  sendSms: 'unknownMissed',
+  previewSms: 'flagged',
+  sendSms: 'flagged',
   ignoreSms: 'smsSent',
   previewRcs: 'smsIgnored',
   sendRcs: 'smsIgnored',
   markNoResponse: 'rcsSent',
-  previewBrandedCall: 'noResponse',
-  placeCall: 'noResponse',
+  showUnknownCall: 'noResponse',
+  ignoreUnknownCall: 'unknownRinging',
+  previewBrandedCall: 'unknownMissed',
+  placeCall: 'unknownMissed',
   confirmPurchase: 'brandedRinging',
   reportUnrecognized: 'brandedRinging',
 };
@@ -188,7 +188,7 @@ function createTwilioClient(env, fetchImpl) {
   };
 }
 
-function createDemo(env, fetchImpl, broadcast) {
+export function createDemo(env, fetchImpl, broadcast) {
   const config = getConfig(env);
   const twilio = createTwilioClient(env, fetchImpl);
   let state = freshState();
@@ -257,13 +257,13 @@ function createDemo(env, fetchImpl, broadcast) {
           return publish({ step: 'unknownRinging' }, {
             kind: 'simulated',
             title: 'Unknown number rings',
-            detail: 'The first, unbranded call is a story simulation.',
+            detail: 'The simulated ring draws Anthony back to his phone, where he sees an unfamiliar number.',
           });
         case 'ignoreUnknownCall':
           return publish({ step: 'unknownMissed' }, {
             kind: 'simulated',
-            title: 'Unknown call missed',
-            detail: 'The customer does not answer; the purchase still needs review.',
+            title: 'Unknown call ignored',
+            detail: 'Anthony sees the unfamiliar caller and chooses not to answer; the purchase still needs review.',
           });
         case 'previewSms':
           return publish({ step: 'smsSent', smsMode: 'simulated' }, {
@@ -319,8 +319,8 @@ function createDemo(env, fetchImpl, broadcast) {
         case 'markNoResponse':
           return publish({ step: 'noResponse' }, {
             kind: 'simulated',
-            title: 'No response observed',
-            detail: 'Presenter advances this story step manually.',
+            title: state.messageChannel === 'fallback' ? 'Fallback text missed' : 'RCS alert missed',
+            detail: 'Anthony was away from his phone and did not see the message. Presenter advances this story step manually.',
           });
         case 'previewBrandedCall':
           return publish({ step: 'brandedRinging', callMode: 'simulated', callPreviewDevice: 'android' }, {

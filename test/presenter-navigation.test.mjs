@@ -90,11 +90,11 @@ function currentActions(html) {
   return html.match(/<div class="current-actions">([\s\S]*?)<\/div>/)?.[1] ?? '';
 }
 
-test('the first outreach after a missed unknown call is SMS, with a real-phone cue', async () => {
-  const app = await boot('/presenter', state({ step: 'unknownMissed' }), { config: { smsReady: true } });
+test('the first outreach after the flagged purchase is SMS, with a real-phone cue', async () => {
+  const app = await boot('/presenter', state({ step: 'flagged' }), { config: { smsReady: true } });
   const actions = currentActions(app.root.innerHTML);
 
-  assert.match(app.root.innerHTML, /<span class="step-index">04 \/ 10<\/span>/);
+  assert.match(app.root.innerHTML, /<span class="step-index">02 \/ 10<\/span>/);
   assert.match(app.root.innerHTML, /current-scene-phone/);
   assert.match(app.root.innerHTML, /Click Send live SMS/);
   assert.match(actions, /data-action="sendSms"/);
@@ -162,23 +162,34 @@ test('after SMS is ignored, RCS becomes the next real-phone action', async () =>
   const app = await boot('/presenter', state({ step: 'smsIgnored' }), { config: { rcsReady: true } });
   const actions = currentActions(app.root.innerHTML);
 
-  assert.match(app.root.innerHTML, /<span class="step-index">06 \/ 10<\/span>/);
+  assert.match(app.root.innerHTML, /<span class="step-index">04 \/ 10<\/span>/);
   assert.match(app.root.innerHTML, /current-scene-phone/);
   assert.match(app.root.innerHTML, /Click Send live RCS/);
   assert.match(actions, /data-action="sendRcs"/);
   assert.match(actions, /data-action="previewRcs"/);
 });
 
-test('RCS is marked missed before the branded call becomes available', async () => {
+test('the missed RCS is followed by an unknown call before the branded call', async () => {
   const app = await boot('/presenter', state({ step: 'rcsSent' }), { config: { voiceReady: true } });
   assert.match(currentActions(app.root.innerHTML), /Anthony misses RCS/);
 
   app.send(state({ step: 'noResponse' }));
+  assert.match(app.root.innerHTML, /<span class="step-index">06 \/ 10<\/span>/);
+  assert.match(currentActions(app.root.innerHTML), /data-action="showUnknownCall"/);
+  assert.doesNotMatch(currentActions(app.root.innerHTML), /data-action="placeCall"/);
+  assert.match(app.root.innerHTML, /not near his phone and never saw it/);
+
+  app.send(state({ step: 'unknownRinging' }));
+  assert.match(app.root.innerHTML, /<span class="step-index">07 \/ 10<\/span>/);
+  assert.match(currentActions(app.root.innerHTML), /data-action="ignoreUnknownCall"/);
+  assert.match(app.root.innerHTML, /hears the phone and walks over/);
+
+  app.send(state({ step: 'unknownMissed' }));
   assert.match(app.root.innerHTML, /<span class="step-index">08 \/ 10<\/span>/);
   assert.match(app.root.innerHTML, /current-scene-phone/);
   assert.match(app.root.innerHTML, /Click Place AI agent call/);
-  assert.match(app.root.innerHTML, /data-action="placeCall"/);
-  assert.match(app.root.innerHTML, /RCS alert was missed/);
+  assert.match(currentActions(app.root.innerHTML), /data-action="placeCall"/);
+  assert.match(app.root.innerHTML, /does not answer an unfamiliar number/);
 });
 
 test('a later RCS request that uses SMS fallback is labeled separately from the first SMS', async () => {

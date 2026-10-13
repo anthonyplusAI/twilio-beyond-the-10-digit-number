@@ -150,7 +150,8 @@ test('the RCS profile closes as the story advances and is unavailable for SMS fa
 
   app.send(state({ step: 'noResponse', messageMode: 'simulated' }));
   assert.doesNotMatch(app.root.innerHTML, /data-rcs-profile-back/);
-  assert.match(app.root.innerHTML, /data-rcs-profile-open/);
+  assert.doesNotMatch(app.root.innerHTML, /data-rcs-profile-open/);
+  assert.match(app.root.innerHTML, /phone-screen-android-lock/);
 
   app.send(state({ step: 'rcsSent', messageMode: 'live', messageChannel: 'fallback' }));
   assert.doesNotMatch(app.root.innerHTML, /data-rcs-profile-open/);

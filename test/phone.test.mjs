@@ -37,7 +37,7 @@ test('the first SMS uses the configured US sender while the later RCS fallback s
   assert.doesNotMatch(fallback, /\+1 \(888\) 437-9561/);
 });
 
-test('an ignored live SMS stays visible and is not confused with the later RCS status', () => {
+test('an ignored live SMS becomes an unread notification and is not confused with the later RCS status', () => {
   const ignored = renderPhone({ step: 'smsIgnored', smsMode: 'live', smsStatus: 'delivered' });
   const rcs = renderPhone({
     step: 'rcsSent',
@@ -48,7 +48,11 @@ test('an ignored live SMS stays visible and is not confused with the later RCS s
   });
 
   assert.match(ignored, /data-phone-step="smsIgnored"/);
-  assert.match(ignored, /Simulated SMS view · live SMS delivery confirmed/);
+  assert.match(ignored, /Illustrated lock screen showing an unread SMS/);
+  assert.match(ignored, /phone-notification-app/);
+  assert.match(ignored, /Messages/);
+  assert.match(ignored, /Simulated unread SMS notification · live SMS delivery confirmed/);
+  assert.doesNotMatch(ignored, /phone-screen-messages/);
   assert.match(ignored, /Twilio Bank: Did you make a \$9,800\.00 charge/);
   assert.match(rcs, /data-phone-step="rcsSent"/);
   assert.match(rcs, /src="\/rcs-sender-logo\.png"/);
@@ -69,7 +73,7 @@ test('RCS chat offers the sender profile from an Android-style header', () => {
 });
 
 test('Android RCS rich card keeps both suggested replies inside the card', () => {
-  const chat = renderPhone({ step: 'noResponse' });
+  const chat = renderPhone({ step: 'rcsSent' });
 
   assert.match(chat, /<article class="phone-rcs-card"[\s\S]*?Yes, it was me[\s\S]*?No, not me[\s\S]*?<\/article>/);
   assert.doesNotMatch(chat, /iPhone-style dropdown|phone-rcs-menu/);
@@ -97,7 +101,7 @@ test('RCS sender Info profile shows brand assets and contact details with a back
 });
 
 test('RCS sender Options profile shows privacy and terms without opening external links', () => {
-  const profile = renderPhone({ step: 'noResponse' }, {}, { rcsProfileTab: 'options' });
+  const profile = renderPhone({ step: 'rcsSent' }, {}, { rcsProfileTab: 'options' });
 
   assert.match(profile, /class="phone-rcs-profile-scroll" data-profile-tab="options"/);
   assert.match(profile, /data-rcs-profile-tab="info"[^>]*aria-selected="false"/);
@@ -105,6 +109,22 @@ test('RCS sender Options profile shows privacy and terms without opening externa
   assert.match(profile, /Privacy policy[\s\S]*twiliobank\.example\/privacy/);
   assert.match(profile, /Terms of service[\s\S]*twiliobank\.example\/terms/);
   assert.doesNotMatch(profile, /<a\b/);
+});
+
+test('a missed RCS shows an unread branded notification while SMS fallback stays number-based', () => {
+  const rcs = renderPhone({ step: 'noResponse', messageMode: 'simulated' }, {}, { rcsProfileTab: 'info' });
+  const fallback = renderPhone({ step: 'noResponse', messageMode: 'live', messageChannel: 'fallback' });
+
+  assert.match(rcs, /phone-screen-android-lock/);
+  assert.match(rcs, /Simulated unread RCS notification/);
+  assert.ok(rcs.includes('src="/rcs-sender-logo.png"'));
+  assert.match(rcs, /Twilio Bank/);
+  assert.doesNotMatch(rcs, /phone-rcs-verified-mark/);
+  assert.doesNotMatch(rcs, /phone-rcs-card|data-rcs-profile-open/);
+  assert.match(fallback, /Simulated unread SMS notification · number-based fallback confirmed/);
+  assert.match(fallback, /phone-screen-lock/);
+  assert.ok(fallback.includes('+1 (800) 555-0148'));
+  assert.doesNotMatch(fallback, /phone-rcs-verified-mark|rcs-sender-logo/);
 });
 
 test('sender profile is unavailable on first SMS and RCS SMS fallback', () => {
@@ -120,6 +140,6 @@ test('sender profile is unavailable on first SMS and RCS SMS fallback', () => {
     assert.doesNotMatch(phone, /data-rcs-profile-open|data-rcs-profile-back|data-rcs-profile-tab/);
     assert.doesNotMatch(phone, /phone-screen-rcs-profile|phone-device-android/);
     assert.doesNotMatch(phone, /phone-rcs-verified-mark|Verified business/);
-    assert.match(phone, /phone-status-dark/);
+    assert.match(phone, ['smsIgnored', 'noResponse'].includes(state.step) ? /phone-status-light/ : /phone-status-dark/);
   }
 });

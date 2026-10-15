@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="Twilio Bank card security report received graphic">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#091a32"/>
+      <stop offset="0.58" stop-color="#112b4c"/>
+      <stop offset="1" stop-color="#172f51"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" rx="36" fill="url(#background)"/>
+  <circle cx="1100" cy="80" r="310" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="3"/>
+  <circle cx="1100" cy="80" r="220" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="3"/>
+  <circle cx="1100" cy="80" r="130" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="3"/>
+  <path transform="translate(76 70) scale(1.35)" fill="#ef223a" d="M17.25 33.17C19.69 33.17 21.67 31.19 21.67 28.75C21.67 26.31 19.69 24.33 17.25 24.33C14.81 24.33 12.83 26.31 12.83 28.75C12.83 31.19 14.81 33.17 17.25 33.17ZM17.25 21.67C19.69 21.67 21.67 19.69 21.67 17.25C21.67 14.81 19.69 12.83 17.25 12.83C14.81 12.83 12.83 14.81 12.83 17.25C12.83 19.69 14.81 21.67 17.25 21.67ZM28.75 33.17C31.19 33.17 33.17 31.19 33.17 28.75C33.17 26.31 31.19 24.33 28.75 24.33C26.31 24.33 24.33 26.31 24.33 28.75C24.33 31.19 26.31 33.17 28.75 33.17ZM28.75 21.67C31.19 21.67 33.17 19.69 33.17 17.25C33.17 14.81 31.19 12.83 28.75 12.83C26.31 12.83 24.33 14.81 24.33 17.25C24.33 19.69 26.31 21.67 28.75 21.67ZM23 0C35.46 0 46 10.54 46 23C46 35.46 35.46 46 23 46C10.54 46 0 35.46 0 23C0 10.54 10.54 0 23 0ZM23 6.19C13.74 6.19 6.19 13.48 6.19 22.69C6.19 31.9 13.74 39.81 23 39.81C32.26 39.81 39.81 31.9 39.81 22.69C39.81 13.48 32.26 6.19 23 6.19Z"/>
+  <text x="160" y="111" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="39" font-weight="700" letter-spacing="-1">twilio bank</text>
+  <rect x="76" y="179" width="224" height="52" rx="26" fill="#ffffff" fill-opacity="0.12"/>
+  <text x="106" y="214" fill="#dceaf8" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" letter-spacing="1.6">CASE UPDATE</text>
+  <text x="76" y="348" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="88" font-weight="700" letter-spacing="-3">Report received</text>
+  <text x="79" y="410" fill="#c5d7eb" font-family="Arial, Helvetica, sans-serif" font-size="35">Your card security case is under review</text>
+  <path d="M77 473H1123" stroke="#ffffff" stroke-opacity="0.25" stroke-width="2"/>
+  <circle cx="92" cy="535" r="10" fill="#ef223a"/>
+  <text x="120" y="545" fill="#dceaf8" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700">TWILIO BANK</text>
+  <text x="1122" y="545" fill="#b4c8dd" font-family="Arial, Helvetica, sans-serif" font-size="24" text-anchor="end">View the latest status in your app</text>
+</svg>

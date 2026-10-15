@@ -244,6 +244,7 @@ test('explicit spoken denial records an unrecognized decision before the agent r
       assert.deepEqual(decisions, [{ callSid, decision: 'unrecognized' }]);
       assert.match(prompts[0], /unrecognized/i);
       assert.match(prompts[0], /recorded/i);
+      assert.match(prompts[0], /demo fraud report/i);
     } finally {
       socket.close();
       await once(socket, 'close');
@@ -367,6 +368,11 @@ test('an uncertain answer stays pending until the caller clearly denies the char
       await uncertainReply;
       assert.deepEqual(decisions, []);
 
+      const contradictoryReply = nextTalkCycle(socket);
+      socket.send(JSON.stringify({ type: 'prompt', voicePrompt: "Yes, I didn't.", last: true }));
+      await contradictoryReply;
+      assert.deepEqual(decisions, []);
+
       const clearReply = nextTalkCycle(socket);
       socket.send(JSON.stringify({ type: 'prompt', voicePrompt: 'I did not authorize that deposit.', last: true }));
       await clearReply;
@@ -384,7 +390,7 @@ test('an uncertain answer stays pending until the caller clearly denies the char
   });
 });
 
-test('a request to repeat the amount does not count as a spoken denial', async () => {
+test('a request to repeat the amount does not count as a charge decision', async () => {
   const callSid = `CA${'5'.repeat(32)}`;
   const decisions = [];
   await withRelay(async (url) => {
@@ -398,6 +404,11 @@ test('a request to repeat the amount does not count as a spoken denial', async (
         from: env.TWILIO_VOICE_FROM,
         to: env.DEMO_TO_NUMBER,
       }));
+      const yesRepeatReply = nextTalkCycle(socket);
+      socket.send(JSON.stringify({ type: 'prompt', voicePrompt: 'Yes, can you repeat the amount?', last: true }));
+      await yesRepeatReply;
+      assert.deepEqual(decisions, []);
+
       const repeatReply = nextTalkCycle(socket);
       socket.send(JSON.stringify({ type: 'prompt', voicePrompt: 'No, can you repeat the amount?', last: true }));
       await repeatReply;
@@ -424,6 +435,10 @@ test('standalone yes and no remain valid answers to the charge question', async 
   const cases = [
     { callSid: `CA${'6'.repeat(32)}`, speech: 'No.', decision: 'unrecognized' },
     { callSid: `CA${'7'.repeat(32)}`, speech: 'Yes!', decision: 'recognized' },
+    { callSid: `CA${'8'.repeat(32)}`, speech: "No, I didn't.", decision: 'unrecognized' },
+    { callSid: `CA${'9'.repeat(32)}`, speech: "I didn't buy it.", decision: 'unrecognized' },
+    { callSid: `CA${'a'.repeat(32)}`, speech: 'Yes, that was me.', decision: 'recognized' },
+    { callSid: `CA${'b'.repeat(32)}`, speech: "Yes, it's mine.", decision: 'recognized' },
   ];
   const decisions = [];
   await withRelay(async (url) => {

@@ -9,7 +9,7 @@
     "start": "node --env-file-if-exists=.env server/index.mjs",
     "create:rcs-template": "node --env-file=.env scripts/create-rcs-template.mjs",
     "test": "node --test test/*.test.mjs",
-    "check": "node --check public/app.js && node --check public/phone.js && node --check server/app.mjs && node --check server/index.mjs && node --check server/voice-agent.mjs && node --check scripts/create-rcs-template.mjs"
+    "check": "node --check public/app.js && node --check public/architecture-guide.js && node --check public/phone.js && node --check server/app.mjs && node --check server/index.mjs && node --check server/voice-agent.mjs && node --check scripts/create-rcs-template.mjs"
   },
   "engines": {
     "node": ">=22"

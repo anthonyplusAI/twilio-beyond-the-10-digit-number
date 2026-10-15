@@ -138,23 +138,30 @@ jobs:
           done
           echo '::error::The new Container App revision did not become ready.'
           exit 1
-      - name: Smoke test public health and banking page
+      - name: Smoke test public app and RCS case assets
         env:
           FQDN: ${{ steps.app.outputs.fqdn }}
         shell: bash
         run: |
+          set -euo pipefail
           for attempt in $(seq 1 30); do
             bank_status='not checked'
+            case_status='not checked'
+            card_status='not checked'
+            card_type='not checked'
             status=$(curl --silent --show-error --max-time 10 --output /dev/null --write-out '%{http_code}' "https://${FQDN}/healthz" || true)
             if [ "$status" = 200 ]; then
               bank_status=$(curl --silent --show-error --max-time 10 --output /dev/null --write-out '%{http_code}' "https://${FQDN}/bank" || true)
-              if [ "$bank_status" = 200 ]; then
-                echo "Deployed app serves /healthz and /bank at https://${FQDN}"
+              case_status=$(curl --silent --show-error --max-time 10 --output /dev/null --write-out '%{http_code}' "https://${FQDN}/bank?case=1" || true)
+              card_result=$(curl --silent --show-error --max-time 10 --output /dev/null --write-out '%{http_code} %{content_type}' "https://${FQDN}/rcs-case-update-card.png" || true)
+              read -r card_status card_type <<< "$card_result"
+              if [ "$bank_status" = 200 ] && [ "$case_status" = 200 ] && [ "$card_status" = 200 ] && [ "$card_type" = image/png ]; then
+                echo "Deployed app serves /healthz, /bank, /bank?case=1, and the RCS case card at https://${FQDN}"
                 exit 0
               fi
             fi
-            echo "Smoke attempt $attempt: health=${status:-no response}, bank=$bank_status; retrying."
+            echo "Smoke attempt $attempt: health=${status:-no response}, bank=$bank_status, case=$case_status, card=$card_status ($card_type); retrying."
             sleep 10
           done
-          echo '::error::Public /healthz and /bank did not both return HTTP 200.'
+          echo '::error::Public app or RCS case card smoke check failed.'
           exit 1

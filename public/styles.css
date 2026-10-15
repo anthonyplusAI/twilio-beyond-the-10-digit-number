@@ -166,6 +166,39 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
 .bank-stage.contact-active .activity-panel { margin-top: 18px; }
 .bank-stage.contact-active .transaction-row { min-height: 57px; }
 
+/* Case status opened from the RCS card's URL action */
+.case-canvas { max-width: 1110px; padding-top: 29px; }
+.case-navigation { display: flex; justify-content: space-between; align-items: center; gap: 15px; color: var(--subtle); font-size: 12px; }
+.case-navigation a { color: var(--blue); font-size: 13px; font-weight: 750; text-decoration: none; }
+.case-navigation a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.case-heading { margin: 30px 0 22px; }
+.case-eyebrow { color: var(--red); font-size: 12px; font-weight: 800; }
+.case-heading h1 { margin: 7px 0 5px; font-family: "Avenir Next", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: clamp(32px, 3.5vw, 46px); letter-spacing: -.05em; line-height: 1.06; }
+.case-heading p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.4; }
+.case-panel { overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); box-shadow: var(--shadow); }
+.case-panel-status { display: flex; align-items: center; gap: 13px; padding: 19px 24px; border-bottom: 1px solid var(--success-line); background: var(--success-soft); color: var(--success-text); }
+.case-status-icon { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border: 1px solid var(--success-line); border-radius: 12px; background: var(--success-inset); }
+.case-panel-status > div { display: grid; gap: 3px; }
+.case-panel-status strong { font-size: 17px; line-height: 1.15; }
+.case-panel-status small { color: var(--muted); font-size: 12px; }
+.case-status-pill { margin-left: auto; padding: 6px 10px; border: 1px solid var(--success-line); border-radius: 99px; color: var(--success-text); background: var(--success-inset); font-size: 11px; font-weight: 750; white-space: nowrap; }
+.case-purchase { padding: 23px 28px 20px; border-bottom: 1px solid var(--line); }
+.case-purchase > span { color: var(--muted); font-size: 11px; font-weight: 750; }
+.case-purchase > div { display: flex; align-items: baseline; justify-content: space-between; gap: 15px; margin-top: 6px; }
+.case-purchase h2 { margin: 0; font-size: 23px; line-height: 1.2; letter-spacing: -.025em; }
+.case-purchase > div > strong { font-size: 24px; line-height: 1.1; white-space: nowrap; }
+.case-purchase p { margin: 7px 0 0; color: var(--muted); font-size: 12px; }
+.case-steps { display: grid; gap: 15px; padding: 22px 28px 25px; }
+.case-steps > div { display: flex; align-items: start; gap: 13px; }
+.case-step-marker { width: 25px; height: 25px; flex: none; display: grid; place-items: center; border-radius: 50%; color: var(--success-text); background: var(--success-soft); border: 1px solid var(--success-line); }
+.case-step-pending { color: var(--muted); background: var(--surface-raised); border-color: var(--line); }
+.case-step-marker .icon { width: 14px; height: 14px; }
+.case-steps strong { font-size: 13px; }
+.case-steps p { margin: 3px 0 0; color: var(--muted); font-size: 12px; line-height: 1.35; }
+.case-empty { padding: 23px 28px; }
+.case-empty p { margin: 0; color: var(--muted); }
+.case-demo-note { margin: 14px 0 0; color: var(--subtle); font-size: 12px; line-height: 1.35; }
+
 /* Audience trust overview */
 .architecture-shell { background: var(--page); }
 .architecture-topbar { height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 clamp(24px, 4vw, 64px); border-bottom: 1px solid var(--line); background: var(--surface); }
@@ -176,7 +209,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
 .architecture-details-only .architecture-appendix { padding-top: 28px; }
 .architecture-details-only .architecture-appendix-inner { margin-top: 0; }
 .architecture-main { max-width: 1600px; min-height: calc(100svh - 64px); display: flex; margin: 0 auto; padding: 30px clamp(24px, 4vw, 64px) 24px; }
-.architecture-slide { width: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; gap: 16px; }
+.architecture-slide { width: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; gap: 28px; }
 .architecture-intro { display: flex; align-items: end; justify-content: space-between; gap: 38px; }
 .architecture-intro h1 { max-width: 850px; margin: 0; font-family: "Avenir Next", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: clamp(36px, 3.7vw, 56px); font-weight: 800; line-height: 1.06; letter-spacing: -0.05em; }
 .architecture-intro > p { max-width: 315px; margin: 0 0 4px; color: var(--muted); font-size: 16px; line-height: 1.42; }
@@ -189,7 +222,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
 .map-origin p { max-width: 180px; margin: 12px 0 0; color: #bed1e7; font-size: 14px; line-height: 1.4; }
 .map-arrow { position: relative; align-self: center; height: 2px; background: var(--subtle); }
 .map-arrow::after { content: ""; position: absolute; right: 0; top: 50%; width: 9px; height: 9px; border-top: 2px solid var(--subtle); border-right: 2px solid var(--subtle); transform: translateY(-50%) rotate(45deg); }
-.map-channels { min-width: 0; display: grid; grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.map-channels { min-width: 0; display: grid; grid-template-rows: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .map-channel { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(230px, 1.14fr); align-items: center; gap: 16px; padding: 13px 16px 13px 19px; border-radius: 13px; }
 .map-channel-rcs { background: var(--blue-soft); }
 .map-channel-call { background: var(--red-soft); }
@@ -224,8 +257,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
 .architecture-after > div { display: flex; align-items: baseline; flex-wrap: wrap; gap: 3px 9px; }
 .architecture-after strong { color: var(--text); white-space: nowrap; }
 .architecture-after span { color: var(--muted); }
-.architecture-footer { display: flex; justify-content: space-between; align-items: baseline; gap: 15px 24px; padding-top: 11px; border-top: 1px solid var(--line); color: var(--subtle); font-size: 12px; line-height: 1.35; }
-.architecture-footer p { max-width: 610px; margin: 0; }
+.architecture-footer { display: flex; justify-content: flex-end; align-items: baseline; gap: 15px 24px; padding-top: 11px; border-top: 1px solid var(--line); color: var(--subtle); font-size: 12px; line-height: 1.35; }
 .architecture-footer nav { display: flex; flex-wrap: wrap; gap: 6px 12px; justify-content: flex-end; white-space: nowrap; }
 .architecture-footer nav span { color: var(--muted); }
 .architecture-footer a, .architecture-appendix a { color: var(--blue); text-decoration: none; }
@@ -241,9 +273,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
 .appendix-setup { display: grid; gap: 15px; }
 .appendix-setup-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .appendix-setup-grid article { min-width: 0; display: flex; flex-direction: column; padding: 21px 22px; border: 1px solid var(--line); border-top: 3px solid var(--red); border-radius: 14px; background: var(--surface); box-shadow: 0 10px 26px rgb(17 38 68 / 5%); }
-.appendix-setup-grid article:nth-child(2) { border-top-color: var(--blue); }
+.appendix-setup-grid article:nth-child(3) { border-top-color: var(--blue); }
 .appendix-setup-grid article > span { color: var(--red); font-size: 12px; font-weight: 800; }
-.appendix-setup-grid article:nth-child(2) > span { color: var(--blue); }
+.appendix-setup-grid article:nth-child(3) > span { color: var(--blue); }
 .appendix-setup-grid h3 { margin: 7px 0; font-size: 19px; line-height: 1.2; letter-spacing: -.02em; }
 .appendix-setup-grid p { margin: 0 0 16px; color: var(--muted); font-size: 14px; line-height: 1.5; }
 .appendix-setup-grid a { display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; margin-top: auto; font-size: 13px; font-weight: 700; }
@@ -451,7 +483,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
 }
 @media (max-width: 980px) {
   .architecture-main { min-height: 0; }
-  .architecture-slide { gap: 18px; }
+  .architecture-slide { gap: 24px; }
   .architecture-intro { align-items: flex-start; flex-direction: column; gap: 10px; }
   .architecture-intro > p { max-width: 660px; }
   .architecture-map { max-height: none; grid-template-columns: minmax(0, 1fr); gap: 14px; }
@@ -503,6 +535,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
   .bank-service-status { display: none; }
   .bank-topbar { padding: 0 18px; }
   .bank-canvas { padding: 20px 18px 36px; }
+  .case-canvas { padding-top: 20px; }
+  .case-heading { margin: 22px 0 18px; }
+  .case-panel-status { flex-wrap: wrap; padding: 17px; }
+  .case-status-pill { margin-left: 53px; }
+  .case-purchase, .case-steps { padding-left: 18px; padding-right: 18px; }
+  .case-purchase > div { align-items: flex-start; flex-direction: column; gap: 5px; }
   .scene-strip, .scene-strip > div { align-items: flex-start; flex-direction: column; gap: 4px; }
   .scene-strip { flex-direction: row; }
   .account-overview { grid-template-columns: minmax(0, 1fr); }
@@ -561,7 +599,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, summary:focus-visibl
 }
 @media (max-height: 760px) and (min-width: 981px) {
   .architecture-main { padding-top: 20px; padding-bottom: 16px; }
-  .architecture-slide { gap: 11px; }
+  .architecture-slide { gap: 16px; }
   .architecture-intro h1 { font-size: clamp(35px, 3.4vw, 49px); }
   .architecture-map { min-height: 320px; padding: 16px; }
   .map-channel { padding-top: 10px; padding-bottom: 10px; }

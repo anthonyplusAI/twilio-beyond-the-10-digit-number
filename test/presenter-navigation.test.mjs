@@ -199,7 +199,16 @@ test('after SMS is ignored, the next real-phone step sends a branded RCS case up
   assert.match(app.root.innerHTML, /current-scene-phone/);
   assert.match(app.root.innerHTML, /Click Send live RCS/);
   assert.match(currentActions(app.root.innerHTML), /data-action="sendRcs"/);
+  assert.doesNotMatch(currentActions(app.root.innerHTML), /data-action="sendRcs" disabled/);
   assert.match(currentActions(app.root.innerHTML), /data-action="previewRcs"/);
+});
+
+test('the disabled RCS send explains which story action unlocks it', async () => {
+  const app = await boot('/presenter', state({ step: 'smsSent', smsMode: 'simulated' }), {
+    config: { rcsReady: true },
+  });
+
+  assert.match(app.root.innerHTML, /data-action="sendRcs" disabled[^>]*>[^<]*<span class="action-button-label">Send live rich RCS<small>Click Anthony ignores the SMS first<\/small>/);
 });
 
 test('RCS offers View case even when a live request uses SMS fallback', async () => {
@@ -556,4 +565,54 @@ test('the audience follows presenter navigation and manual page choice survives 
   assert.equal(reloadedHome.document.title, 'Customer account · Twilio Bank');
   reloadedHome.send(state({ step: 'caseViewed', audienceView: 'architecture', audienceViewRevision: 11 }));
   assert.equal(reloadedHome.window.location.pathname, '/architecture');
+});
+
+test('a server restart does not replace a presenter-selected architecture page', async () => {
+  const app = await boot('/architecture', state({ step: 'caseViewed', audienceView: 'architecture', audienceViewRevision: 3 }));
+
+  app.send(state({ step: 'idle', chargeDecision: null, audienceView: 'bank', audienceViewRevision: 0 }));
+  assert.equal(app.window.location.pathname, '/architecture');
+  assert.equal(app.document.title, 'Architecture · Twilio Bank');
+
+  app.send(state({ step: 'idle', chargeDecision: null, audienceView: 'bank', audienceViewRevision: 0 }));
+  assert.equal(app.window.location.pathname, '/architecture', 'repeated reconnect snapshots must keep the page');
+
+  app.send(state({ step: 'idle', chargeDecision: null, audienceView: 'bank', audienceViewRevision: 1 }));
+  assert.equal(app.window.location.pathname, '/bank', 'a new presenter page selection must still take effect');
+});
+
+test('refreshing architecture after a server restart keeps the current page', async () => {
+  const app = await boot('/architecture', state({ step: 'idle', chargeDecision: null, audienceView: 'bank', audienceViewRevision: 0 }));
+  assert.equal(app.window.location.pathname, '/architecture');
+  assert.equal(app.document.title, 'Architecture · Twilio Bank');
+
+  app.send(state({ step: 'idle', chargeDecision: null, audienceView: 'bank', audienceViewRevision: 1 }));
+  assert.equal(app.window.location.pathname, '/bank');
+});
+
+test('a server restart keeps the selected guide topic and step until a new presenter choice', async () => {
+  const app = await boot('/architecture/details?topic=rcs&step=7&view=1',
+    state({ step: 'caseViewed', audienceView: 'technicalNotes', audienceViewRevision: 2 }));
+  assert.equal(app.window.location.search, '?topic=rcs&step=7');
+
+  app.send(state({ step: 'idle', chargeDecision: null, audienceView: 'bank', audienceViewRevision: 0 }));
+  assert.equal(app.window.location.pathname, '/architecture/details');
+  assert.equal(app.window.location.search, '?topic=rcs&step=7');
+  assert.equal(app.document.title, 'Implementation guide · Twilio Bank');
+
+  app.send(state({ step: 'idle', chargeDecision: null, audienceView: 'bank', audienceViewRevision: 1 }));
+  assert.equal(app.window.location.pathname, '/bank');
+});
+
+test('a server restart keeps the presenter-selected case page until a new page choice', async () => {
+  const app = await boot('/bank?case=1',
+    state({ step: 'caseViewed', audienceView: 'bank', audienceViewRevision: 4 }),
+    { historyState: { presenterFollow: true } });
+
+  app.send(state({ step: 'idle', chargeDecision: null, audienceView: 'bank', audienceViewRevision: 0 }));
+  assert.equal(app.window.location.pathname, '/bank');
+  assert.equal(app.window.location.search, '?case=1');
+
+  app.send(state({ step: 'idle', chargeDecision: null, audienceView: 'architecture', audienceViewRevision: 1 }));
+  assert.equal(app.window.location.pathname, '/architecture');
 });

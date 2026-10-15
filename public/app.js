@@ -774,7 +774,7 @@ function presenterButton(action, label, options = {}) {
   const unavailable = options.live && options.unavailable ? ' action-unavailable' : '';
   const selected = pendingAction === action ? ' action-pending' : '';
   const badge = options.live ? `<span class="action-kind">${options.unavailable ? 'Setup needed' : 'Real phone'}</span>` : options.simulated ? `<span class="action-kind action-kind-sim">Simulation</span>` : '';
-  const note = options.unavailable || (options.futureStep ? `Unlocks at step ${options.futureStep}` : '');
+  const note = options.unavailable || options.note || (options.futureStep ? `Unlocks at step ${options.futureStep}` : '');
   return `<button type="button" class="action-button${primary}${live}${future}${unavailable}${selected}" data-action="${escapeHtml(action)}" ${disabled ? 'disabled' : ''}><span class="action-button-label">${escapeHtml(pendingAction === action ? 'Working…' : label)}${note ? `<small>${escapeHtml(note)}</small>` : ''}</span>${badge}</button>`;
 }
 
@@ -853,7 +853,7 @@ function renderPresenter(state, config, phoneCue) {
           ${presenterButton('ignoreSms', 'Anthony ignores the SMS', { disabled: step !== 'smsSent', primary: step === 'smsSent', simulated: true })}
         </div></section>
         <section class="control-group"><div class="group-heading"><span>05</span><div><h2>The branded RCS case update</h2><p>Anthony can check the sender and open the fictional case page from a rich card.</p></div></div><div class="action-stack">
-          <div class="action-stack two-up">${presenterButton('sendRcs', 'Send live rich RCS', { disabled: !canRcs || !rcsReady, primary: canRcs && rcsReady, live: true, futureStep: rcsFutureStep, unavailable: !rcsReady && 'Configure RCS to enable' })}${presenterButton('previewRcs', 'Show RCS preview', { disabled: !canRcs, primary: canRcs && !rcsReady, simulated: true })}</div>
+          <div class="action-stack two-up">${presenterButton('sendRcs', 'Send live rich RCS', { disabled: !canRcs || !rcsReady, primary: canRcs && rcsReady, live: true, futureStep: rcsFutureStep, note: step === 'smsSent' && rcsReady ? 'Click Anthony ignores the SMS first' : '', unavailable: !rcsReady && 'Configure RCS to enable' })}${presenterButton('previewRcs', 'Show RCS preview', { disabled: !canRcs, primary: canRcs && !rcsReady, simulated: true })}</div>
           ${renderRcsFallbackToggle(state)}
           ${presenterButton('viewCase', 'Open fictional case page', { disabled: step !== 'rcsSent', primary: step === 'rcsSent', simulated: true })}
         </div></section>
@@ -871,13 +871,21 @@ function renderPresenter(state, config, phoneCue) {
 
 function applySnapshot(next) {
   if (!next || !next.state || !next.config) return;
+  const serverRestarted = !isPresenter && !customerViewPinned
+    && next.state.audienceViewRevision === 0
+    && audiencePaths.has(window.location.pathname)
+    && (snapshot?.state.audienceViewRevision > 0
+      || (!snapshot && (window.location.pathname === '/architecture'
+        || window.location.pathname === '/architecture/details'
+        || bankCaseRequested)));
   pendingPhoneArrivalKind = snapshot && snapshot.state.step !== next.state.step && next.state.audienceView === 'bank'
     ? PHONE_ARRIVAL_KIND_BY_STEP[next.state.step] || null : null;
   if (!illustratedRcsAvailable(next.state)
     || next.state.audienceView !== 'bank'
     || snapshot?.state.step !== next.state.step
     || snapshot?.state.audienceViewRevision !== next.state.audienceViewRevision) rcsProfileTab = null;
-  if (snapshot && (snapshot.state.audienceView !== next.state.audienceView
+  if (serverRestarted) audiencePathOverride = window.location.pathname;
+  else if (snapshot && (snapshot.state.audienceView !== next.state.audienceView
     || snapshot.state.audienceViewRevision !== next.state.audienceViewRevision)) audiencePathOverride = null;
   snapshot = next;
   transportError = '';

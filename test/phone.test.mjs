@@ -2,6 +2,28 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { renderPhone } from '../public/phone.js';
 
+test('incoming calls and messages buzz only when their arrival cue is supplied', () => {
+  for (const [step, arrivalKind] of [
+    ['unknownRinging', 'call'],
+    ['brandedRinging', 'call'],
+    ['smsSent', 'message'],
+    ['rcsSent', 'message'],
+  ]) {
+    const arriving = renderPhone({ step }, {}, { arrivalKind });
+    const settled = renderPhone({ step });
+    assert.match(arriving, new RegExp(`phone-device-buzz-${arrivalKind}`));
+    assert.doesNotMatch(settled, /phone-device-buzz-/);
+  }
+
+  for (const [step, arrivalKind] of [
+    ['unknownMissed', 'call'],
+    ['reached', 'call'],
+    ['smsIgnored', 'message'],
+  ]) {
+    assert.doesNotMatch(renderPhone({ step }, {}, { arrivalKind }), /phone-device-buzz-/);
+  }
+});
+
 test('the unknown incoming and missed calls use the same Android handset without branded identity', () => {
   const incoming = renderPhone({ step: 'unknownRinging' });
   const missed = renderPhone({ step: 'unknownMissed' });
@@ -24,11 +46,21 @@ test('the unknown incoming and missed calls use the same Android handset without
   }
 });
 
-test('the urgent call previews the approved Twilio identity and an illustrative Android call reason', () => {
+test('branded incoming and connected previews show Twilio Bank on both devices', () => {
+  for (const device of ['android', 'iphone']) {
+    for (const step of ['brandedRinging', 'reached']) {
+      const preview = renderPhone({ step, callPreviewDevice: device });
+      const nameClass = device === 'android' ? 'phone-android-name' : 'phone-call-name';
+
+      assert.match(preview, new RegExp(`<div class="${nameClass}\\s*">Twilio Bank<\\/div>`));
+      assert.match(preview, /aria-label="Illustrated [^"]*call (?:showing|from|with) Twilio Bank/);
+      assert.match(preview, /src="\/twilio-bug\.svg"/);
+      assert.doesNotMatch(preview, /<div class="(?:phone-android-name|phone-call-name)">Twilio<\/div>/);
+    }
+  }
+
   const android = renderPhone({ step: 'brandedRinging', callPreviewDevice: 'android' });
   const iphone = renderPhone({ step: 'brandedRinging', callPreviewDevice: 'iphone' });
-
-  assert.match(android, /<div class="phone-android-name">Twilio<\/div>/);
   assert.match(android, /<span>Call reason<\/span>/);
   assert.match(android, /Simulated Android 14\+ · example reason/);
   assert.match(android, /Card security alert/);
@@ -36,29 +68,35 @@ test('the urgent call previews the approved Twilio identity and an illustrative 
 });
 
 test('the post-call SMS gives a lower-urgency case update from a number-only sender', () => {
-  const sms = renderPhone({ step: 'smsSent', smsMode: 'simulated', chargeDecision: 'unrecognized' });
+  const smsCaseUrl = 'https://demo.example.test/bank?case=1&utm_source=sms&utm_medium=transactional&utm_campaign=card_security_case_update&delivery_ref=8c5e2f0a91b34d6aa77cc83d41e9b5f2';
+  const sms = renderPhone({ step: 'smsSent', smsMode: 'simulated', chargeDecision: 'unrecognized' }, { smsCaseUrl });
 
   assert.match(sms, /data-phone-step="smsSent"/);
   assert.match(sms, /Illustrated SMS case-update conversation from a phone number/);
   assert.match(sms, /phone-messages-thread/);
   assert.doesNotMatch(sms, /phone-screen-lock|phone-notification/);
   assert.match(sms, /\+1 \(800\) 555-0148/);
-  assert.match(sms, /Twilio Bank: We received your report about the \$9,800\.00 Midlife Crisis Motors charge\. View case status in your banking app\./);
+  assert.match(sms, /Twilio Bank: We received your report about the \$9,800\.00 Midlife Crisis Motors charge\. View case status in your banking app: <a class="phone-sms-link"/);
+  assert.match(sms, /href="https:\/\/demo\.example\.test\/bank\?case=1&amp;utm_source=sms&amp;utm_medium=transactional/);
+  assert.match(sms, /delivery_ref=8c5e2f0a91b34d6aa77cc83d41e9b5f2<\/a>/);
   assert.match(sms, /Illustrative SMS message preview/);
   assert.doesNotMatch(sms, /Did you make|Was this you|Yes, it was me|No, not me/);
   assert.doesNotMatch(sms, /phone-rcs-card|phone-rcs-verified-mark/);
 });
 
 test('the live SMS preview uses its configured sender while the later RCS fallback remains separate', () => {
-  const config = { smsSenderDisplay: '+18884379561' };
+  const config = { smsSenderDisplay: '+18884379561', smsCaseUrl: 'https://demo.example.test/bank?case=1&utm_source=sms&utm_medium=transactional' };
   const sms = renderPhone({ step: 'smsSent', smsMode: 'live' }, config);
   const ignored = renderPhone({ step: 'smsIgnored', smsMode: 'live' }, config);
   const fallback = renderPhone({ step: 'rcsSent', messageMode: 'live', messageChannel: 'fallback' }, config);
 
   assert.match(sms, /<strong>\+1 \(888\) 437-9561<\/strong>/);
+  assert.match(sms, /class="phone-sms-link"/);
+  assert.match(ignored, /https:\/\/demo\.example\.test\/bank\?case=1&amp;utm_source=sms/);
   assert.match(ignored, /<strong>\+1 \(888\) 437-9561<\/strong>/);
   assert.match(fallback, /<strong>\+1 \(888\) 437-9561<\/strong>/);
   assert.doesNotMatch(fallback, /phone-rcs-verified-mark|rcs-sender-logo/);
+  assert.doesNotMatch(fallback, /phone-sms-link|utm_source=sms/);
   assert.match(fallback, /case status/i);
 });
 

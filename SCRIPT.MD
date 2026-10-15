@@ -72,7 +72,7 @@ This run takes the **“No, not mine”** branch. A clear “Yes, I made it” i
 
 **Screen:** Return to `/bank`. In the Presenter current-step box, click **Place AI agent call** (or **Place live AI agent call** in the full controls). Use **Show call preview** if live calling is unavailable. Show the mirrored phone. Answer and say clearly: **“No, I do not recognize that charge.”** Allow the agent to respond and the bank screen to update. For a preview or failed recognition, use the presenter backup **No, not mine** and label the choice as simulated.
 
-> Let's place the actual call. The display name on my approved test number is Twilio, so this real handset may say “Twilio Inc.” My Samsung runs Android 13. Twilio's published support table starts the full Samsung name, logo, and call-reason display at Android 14. If you don't see all three on my handset, look at the illustrated supported-device example for what that fuller display can look like.
+> Let's place the actual call. The illustrated phone says Twilio Bank for our fictional story. The display name on my approved test number is Twilio, so my real handset may say “Twilio Inc.” My Samsung runs Android 13. Twilio's published support table starts the full Samsung name, logo, and call-reason display at Android 14. If you don't see all three on my handset, look at the illustrated supported-device example for what that fuller display can look like.
 >
 > I'm going to answer. This is a real call to my test phone, with our AI agent behind ConversationRelay. Listen for the question about the deposit and for what happens when I answer.
 
@@ -98,7 +98,7 @@ This run takes the **“No, not mine”** branch. A clear “Yes, I made it” i
 
 **Screen:** In Presenter, click **Send live SMS** or **Show SMS preview**. The illustrated Messages conversation displays the full text as a presenter preview; Anthony has not opened it. Show the live phone if sent. Then click **Anthony ignores SMS** to show his unread notification.
 
-> Here's the case-status SMS from a phone number. I'm opening the simulated conversation so you can read the full message; Anthony hasn't opened it. It says the bank received his card-security report and tells him to check its status in the banking app. Anthony knows he just spoke with the bank, but a new, unfamiliar number still makes him pause. The text says “Twilio Bank”; the sender display doesn't give him a bank profile to inspect. He leaves the text alone.
+> Here's the case-status SMS from a phone number. I'm opening the simulated conversation so you can read the full message; Anthony hasn't opened it. It says the bank received his report, and then there's this long, messy link to the case page. If I see “Twilio Bank” in a text from an unfamiliar number, that name and link alone don't prove who sent it. Anthony pauses and leaves it unopened.
 >
 > This is a lower-urgency update, so nothing in our story breaks if he waits. But the bank would like him to be able to recognize the message and find his case without guessing who sent the text.
 >
@@ -194,15 +194,21 @@ The approved `from` number carries the registered caller identity where supporte
 ### Separate case-status SMS from a number
 
 ~~~js
+const caseUrl = new URL("/bank?case=1", process.env.PUBLIC_BASE_URL);
+caseUrl.searchParams.set("utm_source", "twilio_bank_transactional_notification");
+caseUrl.searchParams.set("utm_medium", "unbranded_sms_from_phone_number");
+caseUrl.searchParams.set("utm_campaign", "fraud_report_case_status_follow_up");
+caseUrl.searchParams.set("delivery_context", "security_notification_clickthrough");
+caseUrl.searchParams.set("reference", "DEMO-CASE-STATUS-000000000000000000000000000000000000000000000000000000000000");
 await client.messages.create({
   to: "+15551234567",
   from: "+18885550123",
   messagingServiceSid: "MGXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
-  body: "Twilio Bank: We received your report about the $9,800.00 Midlife Crisis Motors charge. View case status in your banking app."
+  body: "Twilio Bank: We received your report about the $9,800.00 Midlife Crisis Motors charge. View case status in your banking app: " + caseUrl.toString()
 });
 ~~~
 
-This deliberate number-based SMS is a separate send. It is not an RCS fallback. [Messages API](https://www.twilio.com/docs/messaging/api/message-resource) · [Messaging Service senders](https://www.twilio.com/docs/messaging/services)
+This deliberate number-based SMS is a separate send. It is not an RCS fallback. The URL remains visible because this send does not request link shortening. [Messages API](https://www.twilio.com/docs/messaging/api/message-resource) · [Messaging Service senders](https://www.twilio.com/docs/messaging/services) · [Link Shortening](https://www.twilio.com/docs/messaging/features/link-shortening)
 
 ### New case-status Content Template
 

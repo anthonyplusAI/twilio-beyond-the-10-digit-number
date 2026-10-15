@@ -8,6 +8,8 @@
  * Enhanced Branded Calling iPhone elements: https://www.twilio.com/docs/voice/branded-calling/us-enhanced
  */
 
+import { SMS_BODY_PREFIX, buildSmsBody, buildSmsCaseUrl } from './sms-content.js';
+
 const visibleSteps = new Set([
   'smsSent',
   'smsIgnored',
@@ -50,6 +52,7 @@ const icon = (name, extraClass = '') => {
 };
 
 const brandMark = () => '<img class="phone-twilio-mark" src="/twilio-bug.svg" alt="" aria-hidden="true" />';
+const brandedCallerName = 'Twilio Bank';
 const rcsVerifiedMark = () => `<span class="phone-rcs-verified-mark" aria-hidden="true">${icon('check')}</span>`;
 
 const statusBar = (tone = 'light') => `
@@ -83,14 +86,14 @@ const callAction = (glyph, label, kind = 'neutral') => `
   </div>`;
 
 const incomingCall = (branded = false) => `
-  <div class="phone-screen phone-screen-call" aria-label="${branded ? 'Illustrated incoming branded call showing Twilio' : 'Illustrated incoming call from an unfamiliar phone number'}">
+  <div class="phone-screen phone-screen-call" aria-label="${branded ? `Illustrated incoming branded call showing ${brandedCallerName}` : 'Illustrated incoming call from an unfamiliar phone number'}">
     ${statusBar()}
     <div class="phone-call-content">
       <div class="phone-call-identity">
         <div class="phone-call-avatar ${branded ? 'phone-call-avatar-branded' : ''}">
           ${branded ? brandMark() : icon('person', 'phone-call-person')}
         </div>
-        <div class="phone-call-name ${branded ? '' : 'phone-call-name-unknown'}">${branded ? 'Twilio' : '+1 (415) 555-0148'}</div>
+        <div class="phone-call-name ${branded ? '' : 'phone-call-name-unknown'}">${branded ? brandedCallerName : '+1 (415) 555-0148'}</div>
         <div class="phone-call-kind">${branded ? 'Incoming call' : 'mobile'}</div>
       </div>
       <div class="phone-call-bottom">
@@ -206,9 +209,15 @@ const rcsProfileScreen = (tab) => `
     <span class="phone-android-home-indicator phone-android-home-indicator-dark" aria-hidden="true"></span>
   </div>`;
 
-const firstSmsBody = 'Twilio Bank: We received your report about the $9,800.00 Midlife Crisis Motors charge. View case status in your banking app.';
 const fallbackSmsBody = 'Twilio Bank: Your fraud report for the $9,800.00 Midlife Crisis Motors charge is being reviewed. View case status in your banking app.';
 const illustrativeSmsSender = '+1 (800) 555-0148';
+
+const escapeHtml = (value) => String(value)
+  .replaceAll('&', '&amp;')
+  .replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;')
+  .replaceAll("'", '&#39;');
 
 function formatSmsSender(sender) {
   if (typeof sender !== 'string' || !/^\+[1-9]\d{7,14}$/.test(sender)) return illustrativeSmsSender;
@@ -216,7 +225,7 @@ function formatSmsSender(sender) {
   return usNumber ? `+1 (${usNumber[1]}) ${usNumber[2]}-${usNumber[3]}` : sender;
 }
 
-const unreadSmsNotification = (sender, ignored = false) => {
+const unreadSmsNotification = (sender, body, ignored = false) => {
   const date = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date());
   return `
     <div class="phone-screen phone-screen-lock" aria-label="Illustrated lock screen showing an unread SMS from ${sender}">
@@ -231,7 +240,7 @@ const unreadSmsNotification = (sender, ignored = false) => {
             <span>${ignored ? '2 min ago' : 'now'}</span>
           </div>
           <strong>${sender}</strong>
-          <span class="phone-notification-text">${firstSmsBody}</span>
+          <span class="phone-notification-text">${escapeHtml(body)}</span>
         </div>
       </div>
       <div class="phone-lock-shortcuts" aria-hidden="true">
@@ -269,12 +278,12 @@ const smsMessageScreen = (smsSender = illustrativeSmsSender, body = fallbackSmsB
 };
 
 const connectedCall = () => `
-  <div class="phone-screen phone-screen-call phone-screen-connected" aria-label="Illustrated connected call with Twilio">
+  <div class="phone-screen phone-screen-call phone-screen-connected" aria-label="Illustrated connected call with ${brandedCallerName}">
     ${statusBar()}
     <div class="phone-call-content">
       <div class="phone-call-identity phone-call-identity-connected">
         <div class="phone-call-avatar phone-call-avatar-branded">${brandMark()}</div>
-        <div class="phone-call-name">Twilio</div>
+        <div class="phone-call-name">${brandedCallerName}</div>
         <div class="phone-call-kind">00:18</div>
       </div>
       <div class="phone-connected-bottom">
@@ -296,13 +305,13 @@ const connectedCall = () => `
 // not a claim that this presenter’s approved bundle contains that exact reason.
 // https://www.twilio.com/docs/voice/branded-calling/us-enhanced
 const androidCall = (connected = false, branded = true) => `
-  <div class="phone-screen phone-screen-android-call ${connected ? 'phone-screen-android-connected' : ''}" aria-label="${branded ? `Illustrated Android 14 or later ${connected ? 'connected' : 'incoming'} branded call from Twilio${connected ? '' : ' with example call reason Card security alert'}` : 'Illustrated Android 14 or later incoming call from an unfamiliar phone number'}">
+  <div class="phone-screen phone-screen-android-call ${connected ? 'phone-screen-android-connected' : ''}" aria-label="${branded ? `Illustrated Android 14 or later ${connected ? 'connected' : 'incoming'} branded call from ${brandedCallerName}${connected ? '' : ' with example call reason Card security alert'}` : 'Illustrated Android 14 or later incoming call from an unfamiliar phone number'}">
     ${androidStatusBar()}
     <div class="phone-android-call-label">${connected ? 'Ongoing call' : 'Incoming call'}</div>
     <div class="phone-android-call-identity${branded ? '' : ' phone-android-call-identity-unbranded'}">
       ${branded ? `<span class="phone-android-verified">${icon('check')} Verified business</span>` : ''}
       <div class="phone-android-avatar${branded ? '' : ' phone-android-avatar-unknown'}">${branded ? brandMark() : icon('person')}</div>
-      <div class="phone-android-name${branded ? '' : ' phone-android-name-unknown'}">${branded ? 'Twilio' : '+1 (415) 555-0148'}</div>
+      <div class="phone-android-name${branded ? '' : ' phone-android-name-unknown'}">${branded ? brandedCallerName : '+1 (415) 555-0148'}</div>
       ${branded ? connected ? '<div class="phone-android-duration">00:18</div>' : '<div class="phone-android-reason"><span>Call reason</span><strong>Card security alert</strong></div>' : '<div class="phone-android-call-kind">Mobile</div>'}
     </div>
     ${connected ? `
@@ -330,9 +339,19 @@ const androidCall = (connected = false, branded = true) => `
     <span class="phone-android-home-indicator" aria-hidden="true"></span>
   </div>`;
 
-export function renderPhone(state = {}, config = {}, { rcsProfileTab = null } = {}) {
+export function renderPhone(state = {}, config = {}, { rcsProfileTab = null, arrivalKind = null } = {}) {
   const step = state?.step;
   if (!visibleSteps.has(step)) return '';
+
+  const arrivalClass = (step === 'unknownRinging' || step === 'brandedRinging') && arrivalKind === 'call'
+    ? ' phone-device-buzz-call'
+    : (step === 'smsSent' || step === 'rcsSent') && arrivalKind === 'message'
+      ? ' phone-device-buzz-message' : '';
+
+  const smsCaseUrl = config?.smsCaseUrl || buildSmsCaseUrl();
+  const firstSmsBody = buildSmsBody(smsCaseUrl);
+  const escapedSmsCaseUrl = escapeHtml(smsCaseUrl);
+  const firstSmsMarkup = `${escapeHtml(SMS_BODY_PREFIX)}<a class="phone-sms-link" href="${escapedSmsCaseUrl}" target="_blank" rel="noopener noreferrer">${escapedSmsCaseUrl}</a>`;
 
   const brandedCall = step === 'brandedRinging' || step === 'reached';
   const androidPreview = brandedCall && state.callPreviewDevice === 'android';
@@ -369,8 +388,8 @@ export function renderPhone(state = {}, config = {}, { rcsProfileTab = null } = 
       : messageCaption;
   const screen = step === 'unknownRinging' ? androidCall(false, false)
     : step === 'unknownMissed' ? missedCall()
-      : step === 'smsIgnored' ? unreadSmsNotification(formatSmsSender(config?.smsSenderDisplay), true)
-        : step === 'smsSent' ? smsMessageScreen(formatSmsSender(config?.smsSenderDisplay), firstSmsBody, 'Illustrated SMS case-update conversation from a phone number')
+      : step === 'smsIgnored' ? unreadSmsNotification(formatSmsSender(config?.smsSenderDisplay), firstSmsBody, true)
+        : step === 'smsSent' ? smsMessageScreen(formatSmsSender(config?.smsSenderDisplay), firstSmsMarkup, 'Illustrated SMS case-update conversation from a phone number')
         : step === 'rcsSent' ? !rcsScene ? smsMessageScreen(formatSmsSender(config?.smsSenderDisplay)) : activeRcsProfileTab ? rcsProfileScreen(activeRcsProfileTab) : rcsMessageScreen()
         : androidPreview ? androidCall(step === 'reached')
           : step === 'brandedRinging' ? incomingCall(true)
@@ -378,7 +397,7 @@ export function renderPhone(state = {}, config = {}, { rcsProfileTab = null } = 
 
   return `
     <aside class="phone-stage" aria-label="Simulated customer phone">
-      <div class="phone-device ${androidPreview || unknownCall || rcsScene ? 'phone-device-android' : ''}" data-phone-step="${step}">
+      <div class="phone-device ${androidPreview || unknownCall || rcsScene ? 'phone-device-android' : ''}${arrivalClass}" data-phone-step="${step}">
         <div class="phone-side-button phone-side-button-left"></div>
         <div class="phone-side-button phone-side-button-right"></div>
         ${screen}

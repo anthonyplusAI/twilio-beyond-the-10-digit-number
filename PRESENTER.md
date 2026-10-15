@@ -37,7 +37,7 @@ After the case is viewed, use **Show architecture** and **Show setup guide** to 
 | --- | --- |
 | **Flag purchase** | The fake bank flags a $9,800.00 deposit at Midlife Crisis Motors on Anthony Dellavecchia's card ending 4829. The purchase and bank are fictional. |
 | **Show unknown call → Anthony ignores it** | Show the illustrated unfamiliar number. This is a comparison **simulation**. No real call is placed. |
-| **Place live AI agent call** or **Show call preview** | The real approved caller display name is **Twilio**, not Twilio Bank. Show the live test phone separately. The illustrated Android 14+ phone shows name, logo, and an **example** call reason. [Supported-device table](https://www.twilio.com/docs/voice/branded-calling/us-enhanced) |
+| **Place live AI agent call** or **Show call preview** | The illustrated phone says **Twilio Bank** for the fictional story. The real approved caller display name is **Twilio**, so show the live test phone separately. The illustrated Android 14+ phone also shows an **example** call reason. [Supported-device table](https://www.twilio.com/docs/voice/branded-calling/us-enhanced) |
 | On the live call, say **“No, I do not recognize that charge.”** | The application should record the spoken decision and show a fraud report in the fake bank. The green response indicator means a decision was captured; it does not mean a real card was blocked. [ConversationRelay WebSocket messages](https://www.twilio.com/docs/voice/conversationrelay/websocket-messages) |
 | For a preview or backup, choose **No, not mine** | This presenter choice simulates the “No” answer when no live answer was captured. **Yes, I made it** ends the charge story without a fraud-report follow-up, so use **No** for the intended webinar path. |
 | **Send live SMS** or **Show SMS preview → Anthony ignores SMS** | This is a separate, number-only update about the already opened fraud report. Anthony leaves the text alone because the sender is an unfamiliar number, not because the urgent question is unresolved. [RCS and SMS sender differences](https://www.twilio.com/docs/rcs) |
@@ -80,9 +80,11 @@ The verified toll-free number is currently registered under a **marketing** use 
 
 Set `TWILIO_SMS_FROM` to the verified toll-free number in the `TWILIO_MESSAGING_SERVICE_SID` sender pool. The app specifies both the Messaging Service and this `From` number, so this deliberate send does not select the RCS Sender. Keep `DEMO_TO_NUMBER` set to your own phone. [Messaging Service sender selection](https://www.twilio.com/docs/messaging/services)
 
-After the **No** answer opens the fictional fraud report, click **Send live SMS**. The fixed body is:
+After the **No** answer opens the fictional fraud report, click **Send live SMS**. The message begins:
 
-> Twilio Bank: We received your report about the $9,800.00 Midlife Crisis Motors charge. View case status in your banking app.
+> Twilio Bank: We received your report about the $9,800.00 Midlife Crisis Motors charge. View case status in your banking app: https://…
+
+The app appends a deliberately long, raw case URL with demo tracking parameters. Its origin comes from `PUBLIC_BASE_URL` when set, or the hosted demo origin otherwise, and it opens `/bank?case=1`. The SMS send does not request Twilio Link Shortening, so the full URL remains visible. A long message may use multiple SMS segments. [Twilio Link Shortening](https://www.twilio.com/docs/messaging/features/link-shortening)
 
 Show the number-only sender on your handset. The audience illustration opens the Messages conversation so the full SMS is readable; this is a presenter preview, not Anthony opening it. Then click **Anthony ignores SMS** to show his unread notification. For a simulation, use **Show SMS preview**. **Refresh live statuses** can show delivery status for the separate SMS. The app does not handle inbound SMS replies. [Messages API](https://www.twilio.com/docs/messaging/api/message-resource) · [Messaging webhooks](https://www.twilio.com/docs/messaging/guides/webhook-request)
 

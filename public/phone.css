@@ -173,7 +173,14 @@
 }
 
 .phone-screen-lock::before { content: ''; position: absolute; width: 420px; height: 420px; top: 33%; left: -70px; border-radius: 47% 53% 51% 49%; transform: rotate(-30deg); background: linear-gradient(135deg, rgba(206,134,179,.12), rgba(219,210,239,.46) 40%, rgba(76,65,130,.13) 73%); filter: blur(3px); }
-.phone-screen-android-lock { border-radius: 37px; }
+.phone-screen-android-lock {
+  border-radius: 37px;
+  background:
+    radial-gradient(ellipse 240px 300px at 82% 63%, rgba(73, 116, 169, .54), transparent 100%),
+    radial-gradient(ellipse 250px 350px at 5% 48%, rgba(51, 73, 122, .72), transparent 100%),
+    linear-gradient(160deg, #172237, #0a1323);
+}
+.phone-screen-android-lock::before { background: linear-gradient(135deg, rgba(117, 161, 213, .08), rgba(128, 171, 220, .23) 45%, rgba(22, 48, 86, .1)); }
 .phone-screen-android-lock .phone-android-status > span:first-child { visibility: hidden; }
 .phone-screen-android-lock .phone-lock-content { padding-top: 31px; }
 .phone-screen-android-lock .phone-lock-time { font-size: 84px; }
@@ -218,7 +225,8 @@
 .phone-rcs-card-body h3 { margin: 0 0 6px; color: #17191f; font-size: 16px; font-weight: 680; line-height: 1.2; letter-spacing: -.25px; }
 .phone-rcs-card-body p { margin: 0; color: #41454f; font-size: 13px; line-height: 1.35; }
 .phone-rcs-card-actions { border-top: 1px solid #e6e8ee; }
-.phone-rcs-card-action { display: grid; place-items: center; min-height: 41px; color: #165fb8; font-size: 13px; font-weight: 650; }
+.phone-rcs-card-action { display: grid; place-items: center; min-height: 41px; color: #165fb8; font-size: 13px; font-weight: 650; text-decoration: none; cursor: pointer; }
+.phone-rcs-card-action:hover { background: #edf5ff; }
 .phone-rcs-card-action + .phone-rcs-card-action { border-top: 1px solid #e6e8ee; }
 .phone-messages-input { display: flex; align-items: center; gap: 9px; min-height: 60px; padding: 0 12px 12px; }
 .phone-messages-plus { color: #8b8d95; }
@@ -276,11 +284,16 @@
 }
 .phone-android-call-label { margin-top: 10px; color: rgba(255, 255, 255, .7); font-size: 14px; text-align: center; }
 .phone-android-call-identity { display: flex; flex-direction: column; align-items: center; text-align: center; margin: 36px 24px 0; }
+.phone-android-call-identity-unbranded { padding-top: 27px; }
 .phone-android-verified { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 999px; color: #d6f5e2; background: rgba(64, 155, 109, .22); font-size: 12px; font-weight: 700; }
 .phone-android-verified .phone-icon { width: 15px; height: 15px; stroke-width: 2.5; }
 .phone-android-avatar { display: grid; place-items: center; width: 108px; height: 108px; margin-top: 24px; border-radius: 50%; background: #f8f8fa; box-shadow: 0 8px 22px rgba(0, 0, 0, .23); }
 .phone-android-avatar .phone-twilio-mark { width: 75px; height: 75px; }
+.phone-android-avatar-unknown { color: #f4f7fb; background: #66758b; }
+.phone-android-avatar-unknown .phone-icon { width: 60px; height: 60px; stroke-width: 1.5; }
 .phone-android-name { margin-top: 18px; font-size: 35px; font-weight: 500; letter-spacing: -.7px; line-height: 1.12; }
+.phone-android-name-unknown { font-size: 27px; letter-spacing: -.6px; white-space: nowrap; }
+.phone-android-call-kind { margin-top: 10px; color: rgba(255, 255, 255, .7); font-size: 15px; }
 .phone-android-reason { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 240px; margin-top: 14px; padding: 12px 20px 14px; border: 1px solid rgba(255, 255, 255, .24); border-radius: 14px; background: rgba(255, 255, 255, .12); }
 .phone-android-reason span { color: rgba(255, 255, 255, .8); font-size: 12px; line-height: 1.2; }
 .phone-android-reason strong { font-size: 21px; font-weight: 700; line-height: 1.2; }
@@ -355,10 +368,12 @@
 .phone-rcs-profile-row-text small { overflow-wrap: anywhere; color: #888d97; font-size: 11.5px; line-height: 1.25; }
 .phone-stage [data-rcs-profile-open],
 .phone-stage [data-rcs-profile-back],
-.phone-stage [data-rcs-profile-tab] { pointer-events: auto; }
+.phone-stage [data-rcs-profile-tab],
+.phone-stage .phone-rcs-card-action { pointer-events: auto; }
 .phone-stage [data-rcs-profile-open]:focus-visible,
 .phone-stage [data-rcs-profile-back]:focus-visible,
-.phone-stage [data-rcs-profile-tab]:focus-visible { outline: 2px solid #175bb3; outline-offset: 2px; }
+.phone-stage [data-rcs-profile-tab]:focus-visible,
+.phone-stage .phone-rcs-card-action:focus-visible { outline: 2px solid #175bb3; outline-offset: -2px; }
 
 .phone-caption { display: flex; align-items: center; gap: 7px; margin: 0; padding: 7px 10px; border-radius: 100px; color: #f5f7fa; background: rgba(17,25,42,.86); font: 500 13px/1.3 -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif; text-align: center; }
 .phone-caption-dot { display: block; width: 7px; height: 7px; border-radius: 50%; background: #d1d8e5; }

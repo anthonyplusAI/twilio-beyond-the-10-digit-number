@@ -3,6 +3,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { dirname, extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { listArchitectureShotVariants } from './architecture-shots.mjs';
 import { attachVoiceRelay, createRelayTwiml, isValidElevenLabsVoiceId, isValidPublicBaseUrl, isValidRelayUrl, resolveRelayUrl } from './voice-agent.mjs';
 
 const moduleDir = dirname(fileURLToPath(import.meta.url));
@@ -18,19 +19,22 @@ const E164 = /^\+[1-9]\d{7,14}$/;
 const PRESENTER_SESSION_LIFETIME_MS = 8 * 60 * 60 * 1_000;
 const STEP_ACTIONS = {
   flagPurchase: 'idle',
-  previewSms: 'flagged',
-  sendSms: 'flagged',
-  ignoreSms: 'smsSent',
-  previewRcs: 'smsIgnored',
-  sendRcs: 'smsIgnored',
-  markNoResponse: 'rcsSent',
-  showUnknownCall: 'noResponse',
+  showUnknownCall: 'flagged',
   ignoreUnknownCall: 'unknownRinging',
   previewBrandedCall: 'unknownMissed',
   placeCall: 'unknownMissed',
   confirmPurchase: 'brandedRinging',
   reportUnrecognized: 'brandedRinging',
+  previewSms: 'reached',
+  sendSms: 'reached',
+  ignoreSms: 'smsSent',
+  previewRcs: 'smsIgnored',
+  sendRcs: 'smsIgnored',
+  showRcsExample: 'rcsSent',
+  showActualFallback: 'rcsSent',
+  viewCase: 'rcsSent',
 };
+const CASE_FOLLOW_UP_ACTIONS = new Set(['previewSms', 'sendSms', 'ignoreSms', 'previewRcs', 'sendRcs', 'showRcsExample', 'showActualFallback', 'viewCase']);
 const ALWAYS_ACTIONS = new Set(['showArchitecture', 'showTechnicalNotes', 'showBank', 'refreshStatuses', 'reset']);
 const CALL_PREVIEW_ACTIONS = new Set(['showAndroidReasonExample', 'showIphoneCallExample']);
 const MIME = {
@@ -65,7 +69,7 @@ function getConfig(env) {
   const recipientValid = E164.test(env.DEMO_TO_NUMBER ?? '');
   const serviceValid = SID.service.test(env.TWILIO_MESSAGING_SERVICE_SID ?? '');
   const smsSenderValid = E164.test(env.TWILIO_SMS_FROM ?? '');
-  const contentValid = SID.content.test(env.TWILIO_RCS_CONTENT_SID ?? '');
+  const contentValid = SID.content.test(env.TWILIO_RCS_CASE_CONTENT_SID ?? '');
   const callerValid = E164.test(env.TWILIO_VOICE_FROM ?? '');
   const relayValid = isValidRelayUrl(resolveRelayUrl(env));
   const openAiValid = Boolean(env.OPENAI_API_KEY?.trim());
@@ -91,6 +95,7 @@ function freshState() {
     smsMode: 'none',
     messageMode: 'none',
     messageChannel: 'none',
+    rcsExampleShown: false,
     callMode: 'none',
     callPreviewDevice: 'iphone',
     smsSid: null,
@@ -146,7 +151,7 @@ function createTwilioClient(env, fetchImpl) {
         To: env.DEMO_TO_NUMBER,
         MessagingServiceSid: env.TWILIO_MESSAGING_SERVICE_SID,
         From: env.TWILIO_SMS_FROM,
-        Body: 'Twilio Bank: Did you make a $9,800.00 charge at Midlife Crisis Motors? Open your banking app to review it.',
+        Body: 'Twilio Bank: We received your report about the $9,800.00 Midlife Crisis Motors charge. View case status in your banking app.',
       }, 'TWILIO_SMS_REJECTED');
       if (!SID.message.test(result?.sid ?? '')
         || typeof result?.status !== 'string'
@@ -160,10 +165,13 @@ function createTwilioClient(env, fetchImpl) {
       const result = await request('Messages.json', 'POST', {
         To: env.DEMO_TO_NUMBER,
         MessagingServiceSid: env.TWILIO_MESSAGING_SERVICE_SID,
-        ContentSid: env.TWILIO_RCS_CONTENT_SID,
+        ContentSid: env.TWILIO_RCS_CASE_CONTENT_SID,
       }, 'TWILIO_MESSAGE_REJECTED');
-      if (!SID.message.test(result?.sid ?? '')) {
-        throw new AppError(502, 'TWILIO_MESSAGE_REJECTED', 'Twilio did not return a valid Message SID. Check Twilio Console before retrying.');
+      if (!SID.message.test(result?.sid ?? '')
+        || typeof result?.status !== 'string'
+        || result.status.length > 50
+        || ['failed', 'undelivered', 'canceled'].includes(result.status.toLowerCase())) {
+        throw new AppError(502, 'TWILIO_MESSAGE_REJECTED', 'Twilio did not accept the case update. Check Twilio Console before retrying.');
       }
       return result;
     },
@@ -240,6 +248,9 @@ export function createDemo(env, fetchImpl, broadcast) {
     if (Object.hasOwn(STEP_ACTIONS, action) && state.step !== STEP_ACTIONS[action]) {
       throw new AppError(409, 'INVALID_TRANSITION', `Cannot run ${action} during ${state.step}.`);
     }
+    if (CASE_FOLLOW_UP_ACTIONS.has(action) && state.chargeDecision !== 'unrecognized') {
+      throw new AppError(409, 'INVALID_TRANSITION', `Cannot run ${action} without an unrecognized purchase report.`);
+    }
     if (CALL_PREVIEW_ACTIONS.has(action) && !['brandedRinging', 'reached'].includes(state.step)) {
       throw new AppError(409, 'INVALID_TRANSITION', `Cannot run ${action} during ${state.step}.`);
     }
@@ -257,7 +268,7 @@ export function createDemo(env, fetchImpl, broadcast) {
           return publish({ step: 'unknownRinging' }, {
             kind: 'simulated',
             title: 'Unknown number rings',
-            detail: 'The simulated ring draws Anthony back to his phone, where he sees an unfamiliar number.',
+            detail: 'The simulated fraud-alert call displays an unfamiliar number, so Anthony cannot tell it is the bank.',
           });
         case 'ignoreUnknownCall':
           return publish({ step: 'unknownMissed' }, {
@@ -268,8 +279,8 @@ export function createDemo(env, fetchImpl, broadcast) {
         case 'previewSms':
           return publish({ step: 'smsSent', smsMode: 'simulated' }, {
             kind: 'simulated',
-            title: 'SMS alert previewed',
-            detail: 'On-screen phone is a simulation; no SMS was sent.',
+            title: 'SMS case update previewed',
+            detail: 'On-screen phone shows a fictional case-status update; no SMS was sent.',
           });
         case 'sendSms': {
           if (!config.smsReady) {
@@ -291,13 +302,13 @@ export function createDemo(env, fetchImpl, broadcast) {
           return publish({ step: 'smsIgnored' }, {
             kind: 'simulated',
             title: 'Unbranded SMS ignored',
-            detail: 'Anthony does not recognize the sender number, so the purchase still needs review.',
+            detail: 'In the simulated customer journey, Anthony does not open the case update from a number-only SMS. His fraud report remains recorded in the fictional app.',
           });
         case 'previewRcs':
           return publish({ step: 'rcsSent', messageMode: 'simulated', messageChannel: 'simulated' }, {
             kind: 'simulated',
-            title: 'RCS alert previewed',
-            detail: 'On-screen phone is a simulation; no message was sent.',
+            title: 'RCS case update previewed',
+            detail: 'On-screen phone shows a branded case-status update with a View case button; no message was sent.',
           });
         case 'sendRcs': {
           if (!config.rcsReady) {
@@ -312,15 +323,33 @@ export function createDemo(env, fetchImpl, broadcast) {
             messageStatus: typeof result.status === 'string' ? result.status : null,
           }, {
             kind: 'real',
-            title: 'Twilio accepted rich message request',
+            title: 'Twilio accepted case-update rich message request',
             detail: `Message ${result.sid}; status ${result.status ?? 'unknown'}. Delivery is not yet confirmed. RCS is preferred; the service may fall back to SMS.`,
           });
         }
-        case 'markNoResponse':
-          return publish({ step: 'noResponse' }, {
+        case 'showRcsExample':
+          if (state.messageMode !== 'live' || state.messageChannel !== 'fallback' || state.rcsExampleShown) {
+            throw new AppError(409, 'INVALID_TRANSITION', 'An RCS example can be shown after a live SMS/MMS fallback.');
+          }
+          return publish({ rcsExampleShown: true }, {
             kind: 'simulated',
-            title: state.messageChannel === 'fallback' ? 'Fallback text missed' : 'RCS alert missed',
-            detail: 'Anthony was away from his phone and did not see the message. Presenter advances this story step manually.',
+            title: 'Illustrative RCS card shown after fallback',
+            detail: 'The live message still used SMS/MMS fallback; this branded RCS phone screen is only a teaching illustration.',
+          });
+        case 'showActualFallback':
+          if (state.messageMode !== 'live' || state.messageChannel !== 'fallback' || !state.rcsExampleShown) {
+            throw new AppError(409, 'INVALID_TRANSITION', 'The live fallback view is already shown.');
+          }
+          return publish({ rcsExampleShown: false }, {
+            kind: 'simulated',
+            title: 'Live SMS/MMS fallback view restored',
+            detail: 'The illustrated phone again shows the number-only result from the live RCS request.',
+          });
+        case 'viewCase':
+          return publish({ step: 'caseViewed', audienceView: 'bank', audienceViewRevision: state.audienceViewRevision + 1 }, {
+            kind: 'simulated',
+            title: 'Case details opened in simulated bank app',
+            detail: 'Presenter advanced the fictional app to its case detail. This does not verify that Anthony opened a live RCS message or that a real bank case exists.',
           });
         case 'previewBrandedCall':
           return publish({ step: 'brandedRinging', callMode: 'simulated', callPreviewDevice: 'android' }, {
@@ -401,6 +430,7 @@ export function createDemo(env, fetchImpl, broadcast) {
             if (result.status !== state[key] || (type === 'message' && nextChannel !== state.messageChannel)) {
               update[key] = result.status;
               if (type === 'message') update.messageChannel = nextChannel;
+              if (type === 'message' && nextChannel !== 'fallback' && state.rcsExampleShown) update.rcsExampleShown = false;
               const channelDetail = type === 'message' && nextChannel !== state.messageChannel
                 ? nextChannel === 'rcs' ? ' RCS sender confirmed after delivery.'
                   : nextChannel === 'fallback' ? ' Number-based fallback sender confirmed after delivery.' : ''
@@ -625,6 +655,10 @@ export function createAppServer({ env = process.env, fetchImpl = fetch, publicDi
       }
       if (pathname === '/api/state' && req.method === 'GET') {
         json(res, 200, demo.snapshot());
+        return;
+      }
+      if (pathname === '/api/architecture-shots' && req.method === 'GET') {
+        json(res, 200, await listArchitectureShotVariants(staticRoot));
         return;
       }
       if (pathname === '/api/events' && req.method === 'GET') {

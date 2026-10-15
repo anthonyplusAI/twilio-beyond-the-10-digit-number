@@ -12,7 +12,6 @@ const visibleSteps = new Set([
   'smsSent',
   'smsIgnored',
   'rcsSent',
-  'noResponse',
   'unknownRinging',
   'unknownMissed',
   'brandedRinging',
@@ -111,8 +110,8 @@ const incomingCall = (branded = false) => `
 const missedCall = () => {
   const date = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date());
   return `
-    <div class="phone-screen phone-screen-lock" aria-label="Illustrated lock screen showing a missed call from an unfamiliar number">
-      ${statusBar()}
+    <div class="phone-screen phone-screen-lock phone-screen-android-lock" aria-label="Illustrated Android lock screen showing a missed call from an unfamiliar number">
+      ${androidStatusBar()}
       <div class="phone-lock-content">
         <div class="phone-lock-icon">${icon('lock')}</div>
         <div class="phone-lock-date">${date}</div>
@@ -122,33 +121,30 @@ const missedCall = () => {
             <span class="phone-notification-app">${icon('phone')} Phone</span>
             <span>now</span>
           </div>
-          <strong>Missed Call</strong>
+          <strong>Missed call</strong>
           <span>+1 (415) 555-0148</span>
         </div>
       </div>
-      <div class="phone-lock-shortcuts" aria-hidden="true">
-        <span>${icon('flash')}</span><span>${icon('camera')}</span>
-      </div>
-      ${homeIndicator()}
+      <span class="phone-android-home-indicator" aria-hidden="true"></span>
     </div>`;
 };
 
-// A media-rich twilio/card keeps QUICK_REPLY actions stacked inside the card on Android.
+// An RCS card can carry a URL action that opens the business's case page.
+// https://www.twilio.com/docs/content/twiliocard
 const rcsCard = () => `
-  <article class="phone-rcs-card" aria-label="Twilio Bank card purchase to review: Midlife Crisis Motors, $9,800.00 vehicle deposit, card ending 4829">
-    <img class="phone-rcs-card-visual" src="/rcs-alert-card.png" alt="Twilio Bank card security graphic for a $9,800.00 vehicle deposit at Midlife Crisis Motors on card ending 4829" />
+  <article class="phone-rcs-card" aria-label="Twilio Bank fraud case update for Midlife Crisis Motors, $9,800.00 vehicle deposit, card ending 4829">
+    <img class="phone-rcs-card-visual" src="/rcs-case-update-card.png" alt="Twilio Bank fraud report received graphic" />
     <div class="phone-rcs-card-body">
-      <h3>Card purchase to review</h3>
-      <p>A $9,800.00 vehicle deposit at Midlife Crisis Motors was charged to card ending 4829. Was this you?</p>
+      <h3>Fraud report received</h3>
+      <p>Your report about the $9,800.00 Midlife Crisis Motors charge is being reviewed.</p>
     </div>
-    <div class="phone-rcs-card-actions" role="group" aria-label="Suggested replies">
-      <span class="phone-rcs-card-action">Yes, it was me</span>
-      <span class="phone-rcs-card-action">No, not me</span>
+    <div class="phone-rcs-card-actions">
+      <a class="phone-rcs-card-action" href="/bank?case=1" target="_blank" rel="noopener noreferrer" aria-label="View the fictional fraud case in Twilio Bank">View case</a>
     </div>
   </article>`;
 
 const rcsMessageScreen = () => `
-  <div class="phone-screen phone-screen-rcs-chat" aria-label="Illustrated Android RCS fraud alert conversation with Twilio Bank">
+  <div class="phone-screen phone-screen-rcs-chat" aria-label="Illustrated Android RCS case update conversation with Twilio Bank">
     ${androidStatusBar('dark')}
     <div class="phone-rcs-chat-nav">
       <span class="phone-rcs-chat-back" aria-hidden="true">${icon('arrowLeft')}</span>
@@ -168,30 +164,6 @@ const rcsMessageScreen = () => `
     </div>
     <span class="phone-android-home-indicator phone-android-home-indicator-dark" aria-hidden="true"></span>
   </div>`;
-
-const unreadRcsNotification = () => {
-  const date = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date());
-  return `
-    <div class="phone-screen phone-screen-lock phone-screen-android-lock" aria-label="Illustrated Android lock screen showing an unread RCS alert from Twilio Bank">
-      ${androidStatusBar()}
-      <div class="phone-lock-content">
-        <div class="phone-lock-date">${date}</div>
-        <div class="phone-lock-time">9:41</div>
-        <div class="phone-notification">
-          <div class="phone-notification-meta">
-            <span class="phone-notification-app">${icon('message')} Messages</span>
-            <span>now</span>
-          </div>
-          <div class="phone-notification-rcs-sender">
-            <img src="/rcs-sender-logo.png" alt="" />
-            <strong>Twilio Bank</strong>
-          </div>
-          <span class="phone-notification-text">Card purchase to review · $9,800.00 at Midlife Crisis Motors. Was this you?</span>
-        </div>
-      </div>
-      <span class="phone-android-home-indicator" aria-hidden="true"></span>
-    </div>`;
-};
 
 const rcsProfileRow = (glyph, value, label) => `
   <div class="phone-rcs-profile-row">
@@ -234,8 +206,8 @@ const rcsProfileScreen = (tab) => `
     <span class="phone-android-home-indicator phone-android-home-indicator-dark" aria-hidden="true"></span>
   </div>`;
 
-const firstSmsBody = 'Twilio Bank: Did you make a $9,800.00 charge at Midlife Crisis Motors? Open your banking app to review it.';
-const fallbackSmsBody = 'Twilio Bank: Open your banking app to review the $9,800.00 charge at Midlife Crisis Motors.';
+const firstSmsBody = 'Twilio Bank: We received your report about the $9,800.00 Midlife Crisis Motors charge. View case status in your banking app.';
+const fallbackSmsBody = 'Twilio Bank: Your fraud report for the $9,800.00 Midlife Crisis Motors charge is being reviewed. View case status in your banking app.';
 const illustrativeSmsSender = '+1 (800) 555-0148';
 
 function formatSmsSender(sender) {
@@ -244,7 +216,7 @@ function formatSmsSender(sender) {
   return usNumber ? `+1 (${usNumber[1]}) ${usNumber[2]}-${usNumber[3]}` : sender;
 }
 
-const unreadSmsNotification = (sender, body = firstSmsBody) => {
+const unreadSmsNotification = (sender, ignored = false) => {
   const date = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date());
   return `
     <div class="phone-screen phone-screen-lock" aria-label="Illustrated lock screen showing an unread SMS from ${sender}">
@@ -256,10 +228,10 @@ const unreadSmsNotification = (sender, body = firstSmsBody) => {
         <div class="phone-notification">
           <div class="phone-notification-meta">
             <span class="phone-notification-app">${icon('message')} Messages</span>
-            <span>now</span>
+            <span>${ignored ? '2 min ago' : 'now'}</span>
           </div>
           <strong>${sender}</strong>
-          <span class="phone-notification-text">${body}</span>
+          <span class="phone-notification-text">${firstSmsBody}</span>
         </div>
       </div>
       <div class="phone-lock-shortcuts" aria-hidden="true">
@@ -269,16 +241,15 @@ const unreadSmsNotification = (sender, body = firstSmsBody) => {
     </div>`;
 };
 
-const messageScreen = (channel = 'sms', smsSender = illustrativeSmsSender) => {
-  const firstSms = channel === 'sms';
+const smsMessageScreen = (smsSender = illustrativeSmsSender, body = fallbackSmsBody, label = 'Illustrated SMS fallback conversation from a phone number') => {
   return `
-  <div class="phone-screen phone-screen-messages" aria-label="${firstSms ? 'Illustrated SMS conversation from an unfamiliar phone number' : 'Illustrated SMS fallback conversation from a phone number'}">
+  <div class="phone-screen phone-screen-messages" aria-label="${label}">
     ${statusBar('dark')}
     <div class="phone-messages-nav">
       <span class="phone-messages-back">${icon('chevron')} <span>Messages</span></span>
       <span class="phone-messages-contact">
         <span class="phone-messages-avatar phone-messages-avatar-plain">${icon('person')}</span>
-        <strong>${firstSms ? smsSender : illustrativeSmsSender}</strong>
+        <strong>${smsSender}</strong>
         ${icon('chevronDown')}
       </span>
       <span class="phone-messages-compose">${icon('compose')}</span>
@@ -286,7 +257,7 @@ const messageScreen = (channel = 'sms', smsSender = illustrativeSmsSender) => {
     <div class="phone-messages-thread">
       <div class="phone-messages-date">Today 9:41 AM</div>
       <div class="phone-messages-bubble">
-        ${firstSms ? firstSmsBody : fallbackSmsBody}
+        ${body}
       </div>
     </div>
     <div class="phone-messages-input" aria-hidden="true">
@@ -324,15 +295,15 @@ const connectedCall = () => `
 // Illustrative supported-Android call screen. The reason shown here is an example,
 // not a claim that this presenter’s approved bundle contains that exact reason.
 // https://www.twilio.com/docs/voice/branded-calling/us-enhanced
-const androidCall = (connected = false) => `
-  <div class="phone-screen phone-screen-android-call ${connected ? 'phone-screen-android-connected' : ''}" aria-label="Illustrated Android 14 or later ${connected ? 'connected' : 'incoming'} branded call from Twilio${connected ? '' : ' with example call reason Card security alert'}">
+const androidCall = (connected = false, branded = true) => `
+  <div class="phone-screen phone-screen-android-call ${connected ? 'phone-screen-android-connected' : ''}" aria-label="${branded ? `Illustrated Android 14 or later ${connected ? 'connected' : 'incoming'} branded call from Twilio${connected ? '' : ' with example call reason Card security alert'}` : 'Illustrated Android 14 or later incoming call from an unfamiliar phone number'}">
     ${androidStatusBar()}
     <div class="phone-android-call-label">${connected ? 'Ongoing call' : 'Incoming call'}</div>
-    <div class="phone-android-call-identity">
-      <span class="phone-android-verified">${icon('check')} Verified business</span>
-      <div class="phone-android-avatar">${brandMark()}</div>
-      <div class="phone-android-name">Twilio</div>
-      ${connected ? '<div class="phone-android-duration">00:18</div>' : '<div class="phone-android-reason"><span>Call reason</span><strong>Card security alert</strong></div>'}
+    <div class="phone-android-call-identity${branded ? '' : ' phone-android-call-identity-unbranded'}">
+      ${branded ? `<span class="phone-android-verified">${icon('check')} Verified business</span>` : ''}
+      <div class="phone-android-avatar${branded ? '' : ' phone-android-avatar-unknown'}">${branded ? brandMark() : icon('person')}</div>
+      <div class="phone-android-name${branded ? '' : ' phone-android-name-unknown'}">${branded ? 'Twilio' : '+1 (415) 555-0148'}</div>
+      ${branded ? connected ? '<div class="phone-android-duration">00:18</div>' : '<div class="phone-android-reason"><span>Call reason</span><strong>Card security alert</strong></div>' : '<div class="phone-android-call-kind">Mobile</div>'}
     </div>
     ${connected ? `
       <div class="phone-android-connected-controls">
@@ -365,48 +336,49 @@ export function renderPhone(state = {}, config = {}, { rcsProfileTab = null } = 
 
   const brandedCall = step === 'brandedRinging' || step === 'reached';
   const androidPreview = brandedCall && state.callPreviewDevice === 'android';
+  const unknownCall = step === 'unknownRinging' || step === 'unknownMissed';
   const firstSms = step === 'smsSent' || step === 'smsIgnored';
   const isSmsFallback = state.messageChannel === 'fallback' || ['sms', 'fallback', 'smsFallback'].includes(state.messageMode);
-  const rcsScene = ['rcsSent', 'noResponse'].includes(step) && !isSmsFallback;
+  const rcsFallbackExample = step === 'rcsSent' && isSmsFallback && state.rcsExampleShown === true;
+  const rcsScene = step === 'rcsSent' && (!isSmsFallback || rcsFallbackExample);
   const activeRcsProfileTab = step === 'rcsSent' && rcsScene && ['info', 'options'].includes(rcsProfileTab) ? rcsProfileTab : null;
   const liveSms = firstSms && state.smsMode === 'live';
   const liveSmsFailed = ['failed', 'undelivered', 'canceled'].includes(String(state.smsStatus || '').toLowerCase());
-  const liveMessage = ['rcsSent', 'noResponse'].includes(step) && state.messageMode === 'live';
+  const liveMessage = step === 'rcsSent' && state.messageMode === 'live';
   const liveMessageFailed = ['failed', 'undelivered', 'canceled'].includes(String(state.messageStatus || '').toLowerCase());
-  const smsView = step === 'smsIgnored' ? 'Simulated unread SMS notification' : 'Simulated SMS view';
-  const smsExample = step === 'smsIgnored' ? 'Simulated unread SMS example' : 'Simulated SMS example';
+  const smsView = step === 'smsSent' ? 'Illustrative SMS message preview' : 'Simulated unread SMS notification';
+  const smsExample = step === 'smsSent' ? 'Illustrative SMS message preview' : 'Simulated unread SMS example';
   const smsCaption = !liveSms ? smsView
     : String(state.smsStatus || '').toLowerCase() === 'delivered' ? `${smsView} · live SMS delivery confirmed`
       : liveSmsFailed ? `${smsExample} · live delivery failed`
         : `${smsExample} · live delivery unconfirmed`;
-  const unreadRcs = step === 'noResponse' && !isSmsFallback;
-  const unreadFallback = step === 'noResponse' && isSmsFallback;
-  const rcsView = unreadRcs ? 'Simulated unread RCS notification' : 'Simulated RCS view';
-  const textView = unreadFallback ? 'Simulated unread SMS notification' : 'Simulated text view';
-  const rcsExample = unreadRcs ? 'Simulated unread RCS example' : 'Simulated RCS example';
+  const rcsView = 'Simulated RCS view';
+  const textView = 'Simulated text view';
+  const rcsExample = 'Simulated RCS example';
   const messageCaption = firstSms ? smsCaption
-    : !liveMessage ? unreadRcs ? rcsView : unreadFallback ? textView : 'Simulated customer phone'
-      : state.messageChannel === 'rcs' ? `${rcsView} · live RCS delivery confirmed`
-        : state.messageChannel === 'fallback' ? `${textView} · number-based fallback confirmed`
-          : liveMessageFailed ? `${rcsExample} · live delivery failed`
-            : `${rcsExample} · live channel unconfirmed`;
-  const caption = activeRcsProfileTab ? 'Simulated RCS business profile'
+    : !liveMessage ? state.messageChannel === 'fallback' ? textView : rcsView
+      : liveMessageFailed ? `${rcsExample} · live delivery failed`
+        : state.messageChannel === 'rcs' && String(state.messageStatus || '').toLowerCase() === 'read' ? `${rcsView} · live RCS read confirmed`
+          : state.messageChannel === 'rcs' && String(state.messageStatus || '').toLowerCase() === 'delivered' ? `${rcsView} · live RCS delivery confirmed`
+            : state.messageChannel === 'fallback' && ['delivered', 'read'].includes(String(state.messageStatus || '').toLowerCase()) ? `${textView} · number-based fallback confirmed`
+            : `${state.messageChannel === 'fallback' ? textView : rcsExample} · live delivery unconfirmed`;
+  const caption = rcsFallbackExample ? `Illustrative RCS example after live SMS/MMS fallback${activeRcsProfileTab ? ' · business profile' : ''}`
+    : activeRcsProfileTab ? 'Simulated RCS business profile'
     : brandedCall ? androidPreview ? 'Simulated Android 14+ · example reason' : 'Simulated iPhone call · name and logo only'
-      : step === 'unknownRinging' || step === 'unknownMissed' ? 'Simulated unbranded call · no call placed'
+      : unknownCall ? 'Simulated Android 14+ unbranded call · no call placed'
       : messageCaption;
-  const screen = step === 'unknownRinging' ? incomingCall(false)
+  const screen = step === 'unknownRinging' ? androidCall(false, false)
     : step === 'unknownMissed' ? missedCall()
-      : step === 'smsIgnored' ? unreadSmsNotification(formatSmsSender(config?.smsSenderDisplay))
-        : step === 'smsSent' ? messageScreen('sms', formatSmsSender(config?.smsSenderDisplay))
-        : step === 'noResponse' ? isSmsFallback ? unreadSmsNotification(illustrativeSmsSender, fallbackSmsBody) : unreadRcsNotification()
-          : step === 'rcsSent' ? isSmsFallback ? messageScreen('fallback') : activeRcsProfileTab ? rcsProfileScreen(activeRcsProfileTab) : rcsMessageScreen()
+      : step === 'smsIgnored' ? unreadSmsNotification(formatSmsSender(config?.smsSenderDisplay), true)
+        : step === 'smsSent' ? smsMessageScreen(formatSmsSender(config?.smsSenderDisplay), firstSmsBody, 'Illustrated SMS case-update conversation from a phone number')
+        : step === 'rcsSent' ? !rcsScene ? smsMessageScreen(formatSmsSender(config?.smsSenderDisplay)) : activeRcsProfileTab ? rcsProfileScreen(activeRcsProfileTab) : rcsMessageScreen()
         : androidPreview ? androidCall(step === 'reached')
           : step === 'brandedRinging' ? incomingCall(true)
             : connectedCall();
 
   return `
     <aside class="phone-stage" aria-label="Simulated customer phone">
-      <div class="phone-device ${androidPreview || rcsScene ? 'phone-device-android' : ''}" data-phone-step="${step}">
+      <div class="phone-device ${androidPreview || unknownCall || rcsScene ? 'phone-device-android' : ''}" data-phone-step="${step}">
         <div class="phone-side-button phone-side-button-left"></div>
         <div class="phone-side-button phone-side-button-right"></div>
         ${screen}

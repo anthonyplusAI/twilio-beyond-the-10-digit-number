@@ -20,7 +20,7 @@ const liveEnv = {
   TWILIO_AUTH_TOKEN: 'test-only-token',
   TWILIO_MESSAGING_SERVICE_SID: SERVICE_SID,
   TWILIO_SMS_FROM: '+14155550102',
-  TWILIO_RCS_CONTENT_SID: CONTENT_SID,
+  TWILIO_RCS_CASE_CONTENT_SID: CONTENT_SID,
   TWILIO_VOICE_FROM: '+14155550101',
   DEMO_TO_NUMBER: '+14155550199',
   TWILIO_CONVERSATION_RELAY_URL: 'wss://relay.example.test/voice-relay',
@@ -408,7 +408,7 @@ async function toFlagged(base) {
 }
 
 async function toSmsIgnored(base) {
-  await toFlagged(base);
+  await toReached(base);
   for (const name of ['previewSms', 'ignoreSms']) {
     const result = await action(base, name);
     assert.equal(result.status, 200, `${name}: ${JSON.stringify(result.body)}`);
@@ -416,8 +416,8 @@ async function toSmsIgnored(base) {
 }
 
 async function toUnknownMissed(base) {
-  await toSmsIgnored(base);
-  for (const name of ['previewRcs', 'markNoResponse', 'showUnknownCall', 'ignoreUnknownCall']) {
+  await toFlagged(base);
+  for (const name of ['showUnknownCall', 'ignoreUnknownCall']) {
     const result = await action(base, name);
     assert.equal(result.status, 200, `${name}: ${JSON.stringify(result.body)}`);
   }
@@ -427,6 +427,13 @@ async function toCallPreview(base) {
   await toUnknownMissed(base);
   const result = await action(base, 'previewBrandedCall');
   assert.equal(result.status, 200, `previewBrandedCall: ${JSON.stringify(result.body)}`);
+}
+
+async function toReached(base, decisionAction = 'reportUnrecognized') {
+  await toCallPreview(base);
+  const result = await action(base, decisionAction);
+  assert.equal(result.status, 200, `${decisionAction}: ${JSON.stringify(result.body)}`);
+  assert.equal(result.body.state.step, 'reached');
 }
 
 async function openSignedRelay(base, callSid) {
@@ -468,12 +475,23 @@ function relayReply(socket, voicePrompt) {
   });
 }
 
-test('the story requires an explicit SMS beat before RCS and reset clears it', async () => {
+test('the story requires a completed fraud call before the case-update messages', async () => {
   await withServer(async (base) => {
     await toFlagged(base);
-    let result = await action(base, 'previewRcs');
+    let result = await action(base, 'previewSms');
     assert.equal(result.status, 409);
     assert.equal(result.body.code, 'INVALID_TRANSITION');
+
+    result = await action(base, 'previewRcs');
+    assert.equal(result.status, 409);
+    assert.equal(result.body.code, 'INVALID_TRANSITION');
+
+    for (const name of ['showUnknownCall', 'ignoreUnknownCall', 'previewBrandedCall', 'reportUnrecognized']) {
+      result = await action(base, name);
+      assert.equal(result.status, 200, name);
+    }
+    assert.equal(result.body.state.step, 'reached');
+    assert.equal(result.body.state.chargeDecision, 'unrecognized');
 
     result = await action(base, 'previewSms');
     assert.equal(result.status, 200);
@@ -493,12 +511,20 @@ test('the story requires an explicit SMS beat before RCS and reset clears it', a
     assert.equal(result.body.state.smsMode, 'simulated');
     assert.equal(result.body.state.messageMode, 'simulated');
 
+    result = await action(base, 'viewCase');
+    assert.equal(result.status, 200);
+    assert.equal(result.body.state.step, 'caseViewed');
+    assert.equal(result.body.state.chargeDecision, 'unrecognized');
+    assert.equal(result.body.state.events.at(-1).kind, 'simulated');
+
     result = await action(base, 'reset');
     assert.equal(result.body.state.step, 'idle');
     assert.equal(result.body.state.smsMode, 'none');
     assert.equal(result.body.state.smsSid, null);
     assert.equal(result.body.state.smsStatus, null);
     assert.equal(result.body.state.messageMode, 'none');
+    assert.equal(result.body.state.chargeDecision, null);
+    assert.equal(result.body.state.decisionSource, null);
   });
 });
 
@@ -508,16 +534,15 @@ test('live SMS requires a configured sender and never advances on missing setup'
     const config = (await snapshot(base)).config;
     assert.equal(config.smsReady, false);
     assert.equal(config.smsSenderDisplay, null);
-    await toFlagged(base);
+    await toReached(base);
     const result = await action(base, 'sendSms');
     assert.equal(result.status, 503);
     assert.equal(result.body.code, 'SMS_NOT_CONFIGURED');
     const current = await snapshot(base);
-    assert.equal(current.state.step, 'flagged');
+    assert.equal(current.state.step, 'reached');
     assert.equal(current.state.smsMode, 'none');
-    assert.deepEqual(current.state.events.map((event) => event.title), [
-      'Unusual purchase flagged',
-    ]);
+    assert.equal(current.state.chargeDecision, 'unrecognized');
+    assert.equal(current.state.events.at(-1).title, 'Presenter marked purchase as unrecognized');
   }, { env: withoutSmsSender });
 });
 
@@ -535,7 +560,7 @@ test('live SMS uses the configured number in the Messaging Service and records A
     assert.equal(config.smsReady, true);
     assert.equal(config.smsSenderMasked, '•••• 0102');
     assert.equal(config.smsSenderDisplay, '+14155550102');
-    await toFlagged(base);
+    await toReached(base);
 
     const unauthorized = await fetch(`${base}/api/action`, {
       method: 'POST',
@@ -559,7 +584,7 @@ test('live SMS uses the configured number in the Messaging Service and records A
     assert.equal(form.get('To'), '+14155550199');
     assert.equal(form.get('MessagingServiceSid'), SERVICE_SID);
     assert.equal(form.get('From'), '+14155550102');
-    assert.equal(form.get('Body'), 'Twilio Bank: Did you make a $9,800.00 charge at Midlife Crisis Motors? Open your banking app to review it.');
+    assert.equal(form.get('Body'), 'Twilio Bank: We received your report about the $9,800.00 Midlife Crisis Motors charge. View case status in your banking app.');
     assert.equal(form.has('ContentSid'), false);
     assert.equal(result.body.state.events.at(-1).kind, 'real');
     assert.match(result.body.state.events.at(-1).title, /SMS/i);
@@ -579,19 +604,19 @@ test('an invalid SMS sender is omitted from audience configuration', async () =>
   }, { env: { ...liveEnv, TWILIO_SMS_FROM: invalidSender } });
 });
 
-test('Twilio SMS rejection is sanitized and leaves the flagged purchase as the last completed beat', async () => {
+test('Twilio SMS rejection is sanitized and leaves the answered call as the last completed beat', async () => {
   const fetchImpl = async () => new Response(JSON.stringify({ code: 21614, message: 'Sensitive +14155550199' }), {
     status: 400,
     headers: { 'content-type': 'application/json' },
   });
   await withServer(async (base) => {
-    await toFlagged(base);
+    await toReached(base);
     const result = await action(base, 'sendSms');
     assert.equal(result.status, 502);
     assert.equal(result.body.code, 'TWILIO_SMS_REJECTED');
     assert.doesNotMatch(result.body.error, /\+14155550199/);
     const current = await snapshot(base);
-    assert.equal(current.state.step, 'flagged');
+    assert.equal(current.state.step, 'reached');
     assert.equal(current.state.smsMode, 'none');
     assert.equal(current.state.smsSid, null);
     assert.equal(current.state.smsStatus, null);
@@ -604,11 +629,11 @@ test('an immediately failed SMS response does not create a sent story state', as
     headers: { 'content-type': 'application/json' },
   });
   await withServer(async (base) => {
-    await toFlagged(base);
+    await toReached(base);
     const result = await action(base, 'sendSms');
     assert.equal(result.status, 502);
     assert.equal(result.body.code, 'TWILIO_SMS_REJECTED');
-    assert.equal((await snapshot(base)).state.step, 'flagged');
+    assert.equal((await snapshot(base)).state.step, 'reached');
     assert.equal((await snapshot(base)).state.smsMode, 'none');
   }, { env: liveEnv, fetchImpl });
 });
@@ -619,12 +644,12 @@ test('a malformed SMS acceptance response is rejected without exposing its conte
     status: { private: 'Sensitive +14155550199' },
   }), { status: 201 });
   await withServer(async (base) => {
-    await toFlagged(base);
+    await toReached(base);
     const result = await action(base, 'sendSms');
     assert.equal(result.status, 502);
     assert.equal(result.body.code, 'TWILIO_SMS_REJECTED');
     assert.doesNotMatch(result.body.error, /\+14155550199/);
-    assert.equal((await snapshot(base)).state.step, 'flagged');
+    assert.equal((await snapshot(base)).state.step, 'reached');
   }, { env: liveEnv, fetchImpl });
 });
 
@@ -648,7 +673,7 @@ test('status refresh tracks the live SMS and RCS messages independently', async 
     return new Response(JSON.stringify(payload), { status: init.method === 'GET' ? 200 : 201 });
   };
   await withServer(async (base) => {
-    await toFlagged(base);
+    await toReached(base);
     for (const [name, step] of [['sendSms', 'smsSent'], ['ignoreSms', 'smsIgnored'], ['sendRcs', 'rcsSent']]) {
       const response = await action(base, name);
       assert.equal(response.status, 200);
@@ -679,7 +704,7 @@ test('status refresh tracks the live SMS and RCS messages independently', async 
   }, { env: liveEnv, fetchImpl });
 });
 
-test('simulated fraud alert journey advances only on explicit actions and reset clears it', async () => {
+test('simulated voice-first journey keeps the spoken report visible through the case update', async () => {
   await withServer(async (base) => {
     const initial = await snapshot(base);
     assert.equal(initial.state.step, 'idle');
@@ -687,22 +712,9 @@ test('simulated fraud alert journey advances only on explicit actions and reset 
     assert.equal(initial.state.callPreviewDevice, 'iphone');
     assert.deepEqual(initial.state.events, []);
 
-    await toSmsIgnored(base);
+    await toUnknownMissed(base);
     assert.match((await snapshot(base)).state.events[0].detail, /Anthony Dellavecchia/);
-    let result = await action(base, 'previewRcs');
-    assert.equal(result.body.state.step, 'rcsSent');
-    assert.equal(result.body.state.messageMode, 'simulated');
-    assert.equal(result.body.state.messageSid, null);
-    result = await action(base, 'markNoResponse');
-    assert.equal(result.body.state.step, 'noResponse');
-    assert.match(result.body.state.events.at(-1).detail, /away from his phone and did not see the message/);
-    result = await action(base, 'previewBrandedCall');
-    assert.equal(result.status, 409);
-    result = await action(base, 'showUnknownCall');
-    assert.equal(result.body.state.step, 'unknownRinging');
-    result = await action(base, 'ignoreUnknownCall');
-    assert.equal(result.body.state.step, 'unknownMissed');
-    result = await action(base, 'previewBrandedCall');
+    let result = await action(base, 'previewBrandedCall');
     assert.equal(result.body.state.step, 'brandedRinging');
     assert.equal(result.body.state.callMode, 'simulated');
     assert.equal(result.body.state.callPreviewDevice, 'android');
@@ -723,8 +735,22 @@ test('simulated fraud alert journey advances only on explicit actions and reset 
     assert.equal(result.status, 200);
     assert.equal(result.body.state.callPreviewDevice, 'iphone');
 
+    result = await action(base, 'previewSms');
+    assert.equal(result.body.state.step, 'smsSent');
+    result = await action(base, 'ignoreSms');
+    assert.equal(result.body.state.step, 'smsIgnored');
+    result = await action(base, 'previewRcs');
+    assert.equal(result.body.state.step, 'rcsSent');
+    assert.equal(result.body.state.messageMode, 'simulated');
+    assert.equal(result.body.state.messageSid, null);
+    result = await action(base, 'viewCase');
+    assert.equal(result.body.state.step, 'caseViewed');
+    assert.equal(result.body.state.chargeDecision, 'unrecognized');
+    assert.equal(result.body.state.decisionSource, 'presenter');
+    assert.equal(result.body.state.audienceView, 'bank');
+
     result = await action(base, 'showArchitecture');
-    assert.equal(result.body.state.step, 'reached');
+    assert.equal(result.body.state.step, 'caseViewed');
     assert.equal(result.body.state.audienceView, 'architecture');
     result = await action(base, 'reset');
     assert.equal(result.body.state.step, 'idle');
@@ -843,6 +869,11 @@ test('presenter can preview a recognized charge without claiming it came from li
     assert.equal(result.body.state.chargeDecision, 'recognized');
     assert.equal(result.body.state.decisionSource, 'presenter');
     assert.equal(result.body.state.events.at(-1).kind, 'simulated');
+    for (const name of ['sendSms', 'previewSms', 'sendRcs', 'previewRcs']) {
+      const rejected = await action(base, name);
+      assert.equal(rejected.status, 409, name);
+      assert.equal(rejected.body.code, 'INVALID_TRANSITION', name);
+    }
   });
 });
 
@@ -881,6 +912,18 @@ test('real RCS action requires complete configuration and leaves the story at SM
     assert.equal(result.body.code, 'RCS_NOT_CONFIGURED');
     assert.equal((await snapshot(base)).state.step, 'smsIgnored');
   });
+});
+
+test('the old fraud-question Content SID cannot make the new case-update RCS send ready', async () => {
+  const { TWILIO_RCS_CASE_CONTENT_SID, ...withoutCaseTemplate } = liveEnv;
+  await withServer(async (base) => {
+    assert.equal((await snapshot(base)).config.rcsReady, false);
+    await toSmsIgnored(base);
+    const result = await action(base, 'sendRcs');
+    assert.equal(result.status, 503);
+    assert.equal(result.body.code, 'RCS_NOT_CONFIGURED');
+    assert.equal((await snapshot(base)).state.step, 'smsIgnored');
+  }, { env: { ...withoutCaseTemplate, TWILIO_RCS_CONTENT_SID: CONTENT_SID } });
 });
 
 test('real RCS sends a configured Content Template to only the fixed tester and records acceptance', async () => {
@@ -953,6 +996,47 @@ test('Twilio delivery from an E.164 sender is identified as number-based fallbac
     assert.equal(delivered.body.state.messageStatus, 'delivered');
     assert.equal(delivered.body.state.messageChannel, 'fallback');
     assert.match(delivered.body.state.events.at(-1).detail, /number-based fallback sender/i);
+
+    const viewed = await action(base, 'viewCase');
+    assert.equal(viewed.status, 200);
+    assert.equal(viewed.body.state.step, 'caseViewed');
+    assert.equal(viewed.body.state.messageChannel, 'fallback');
+    assert.equal(viewed.body.state.chargeDecision, 'unrecognized');
+    assert.equal(viewed.body.state.events.at(-1).kind, 'simulated');
+  }, { env: liveEnv, fetchImpl });
+});
+
+test('presenter can compare an illustrative RCS card after a live SMS fallback without changing delivery facts', async () => {
+  let twilioRequests = 0;
+  const fetchImpl = async (url) => {
+    twilioRequests += 1;
+    return new Response(JSON.stringify(
+      url.endsWith('/Messages.json')
+        ? { sid: MESSAGE_SID, status: 'accepted' }
+        : { sid: MESSAGE_SID, status: 'delivered', from: liveEnv.TWILIO_SMS_FROM },
+    ), { status: url.endsWith('/Messages.json') ? 201 : 200 });
+  };
+  await withServer(async (base) => {
+    await toSmsIgnored(base);
+    await action(base, 'sendRcs');
+    await action(base, 'refreshStatuses');
+    const beforeToggle = twilioRequests;
+
+    const example = await action(base, 'showRcsExample');
+    assert.equal(example.status, 200);
+    assert.equal(example.body.state.step, 'rcsSent');
+    assert.equal(example.body.state.messageMode, 'live');
+    assert.equal(example.body.state.messageChannel, 'fallback');
+    assert.equal(example.body.state.messageStatus, 'delivered');
+    assert.equal(example.body.state.rcsExampleShown, true);
+    assert.equal(example.body.state.events.at(-1).kind, 'simulated');
+    assert.equal(twilioRequests, beforeToggle, 'changing the illustration must not send another message');
+
+    const actual = await action(base, 'showActualFallback');
+    assert.equal(actual.status, 200);
+    assert.equal(actual.body.state.rcsExampleShown, false);
+    assert.equal(actual.body.state.messageChannel, 'fallback');
+    assert.equal(twilioRequests, beforeToggle);
   }, { env: liveEnv, fetchImpl });
 });
 
@@ -968,6 +1052,23 @@ test('Twilio RCS rejection is sanitized and does not create a fake sent state', 
     assert.equal(result.body.code, 'TWILIO_MESSAGE_REJECTED');
     assert.doesNotMatch(result.body.error, /\+14155550199/);
     assert.equal((await snapshot(base)).state.step, 'smsIgnored');
+  }, { env: liveEnv, fetchImpl });
+});
+
+test('an immediately failed case-update RCS response does not create a sent story state', async () => {
+  const fetchImpl = async () => new Response(JSON.stringify({ sid: MESSAGE_SID, status: 'failed' }), {
+    status: 201,
+    headers: { 'content-type': 'application/json' },
+  });
+  await withServer(async (base) => {
+    await toSmsIgnored(base);
+    const result = await action(base, 'sendRcs');
+    assert.equal(result.status, 502);
+    assert.equal(result.body.code, 'TWILIO_MESSAGE_REJECTED');
+    const current = await snapshot(base);
+    assert.equal(current.state.step, 'smsIgnored');
+    assert.equal(current.state.messageMode, 'none');
+    assert.equal(current.state.messageSid, null);
   }, { env: liveEnv, fetchImpl });
 });
 
@@ -1062,6 +1163,19 @@ test('only the active signed call can record Anthony’s spoken answer and updat
       assert.equal(current.state.chargeDecision, 'unrecognized');
       assert.equal(current.state.decisionSource, 'voice');
       assert.equal(current.state.events.at(-1).kind, 'real');
+
+      for (const [name, step] of [
+        ['previewSms', 'smsSent'],
+        ['ignoreSms', 'smsIgnored'],
+        ['previewRcs', 'rcsSent'],
+        ['viewCase', 'caseViewed'],
+      ]) {
+        const next = await action(base, name);
+        assert.equal(next.status, 200, name);
+        assert.equal(next.body.state.step, step, name);
+        assert.equal(next.body.state.chargeDecision, 'unrecognized', name);
+        assert.equal(next.body.state.decisionSource, 'voice', name);
+      }
       live.close();
       await once(live, 'close');
     } finally {
@@ -1087,17 +1201,18 @@ test('refreshStatuses polls only recorded live SIDs and updates delivery separat
     return new Response(JSON.stringify(payload), { status: init.method === 'GET' ? 200 : 201 });
   };
   await withServer(async (base) => {
-    await toSmsIgnored(base);
-    await action(base, 'sendRcs');
-    await action(base, 'markNoResponse');
-    await action(base, 'showUnknownCall');
-    await action(base, 'ignoreUnknownCall');
+    await toUnknownMissed(base);
     await action(base, 'placeCall');
+    await action(base, 'reportUnrecognized');
+    await action(base, 'previewSms');
+    await action(base, 'ignoreSms');
+    await action(base, 'sendRcs');
     const result = await action(base, 'refreshStatuses');
     assert.equal(result.status, 200);
     assert.equal(result.body.state.messageStatus, 'delivered');
     assert.equal(result.body.state.callStatus, 'in-progress');
-    assert.equal(result.body.state.step, 'brandedRinging');
+    assert.equal(result.body.state.step, 'rcsSent');
+    assert.equal(result.body.state.chargeDecision, 'unrecognized');
     assert.equal(seen.filter(({ init }) => init.method === 'GET').length, 2);
     assert.ok(result.body.state.events.some((event) => event.kind === 'real' && /delivered/i.test(event.title)));
   }, { env: liveEnv, fetchImpl });

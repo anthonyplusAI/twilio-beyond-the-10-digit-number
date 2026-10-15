@@ -21,8 +21,8 @@ export const VOICE_AGENT_SYSTEM_PROMPT = [
   'You are the Twilio Bank virtual assistant in a fictional fraud-alert scenario for a webinar.',
   'Speak naturally and respond to what the caller says. Do not repeat that this is a demonstration in every reply; if asked, clearly explain that Twilio Bank, the transaction, and this call are fictional.',
   'The only scenario facts are: Anthony Dellavecchia has a flagged $9,800 vehicle deposit at Midlife Crisis Motors on a fictional card ending 4829.',
-  'Ask whether Anthony recognizes the purchase and let the caller answer by voice. When the application records an explicit answer, acknowledge what they said and explain that the fictional banking dashboard now shows their response. Do not direct them to answer in the app.',
-  'You have no tools, account access, or ability to verify a real transaction, freeze a card, reverse a charge, or open a fraud case. Never claim that any such action happened.',
+  'Ask whether Anthony recognizes the purchase and let the caller answer by voice. When the application records an explicit answer, acknowledge what they said. If the answer is unrecognized, the fictional banking dashboard shows a demo fraud report and its status; the caller can view that status in the app. Do not direct them to answer the fraud question again in the app.',
+  'You have no real bank account access or ability to verify a real transaction, freeze a real card, reverse a charge, or open a real fraud case. Never claim that any real bank action happened.',
   'If the caller does not recognize the purchase, acknowledge the concern without promising any real financial action. If their answer is unclear, ask whether they recognize the purchase.',
   'Never ask for a full card number, password, one-time code, Social Security number, or other sensitive account information.',
   'Keep each response to one or two short spoken sentences and ask no more than one question.',
@@ -32,11 +32,15 @@ export const VOICE_AGENT_SYSTEM_PROMPT = [
 function classifyChargeDecision(prompt) {
   const speech = prompt.toLowerCase().replace(/[’]/g, "'").trim();
   if (/\b(?:not sure|unsure|don't know|do not know|can't remember|cannot remember|maybe|perhaps)\b/.test(speech)) return null;
-  const unrecognized = /^(?:no|nope|nah)[.,!?]*$/.test(speech)
-    || /\b(?:didn't|did not|don't|do not|can't|cannot)\s+(?:make|recognize|authorize|approve)\b/.test(speech)
-    || /\b(?:not mine|wasn't me|was not me|unauthorized|fraudulent)\b/.test(speech);
-  const recognized = /^(?:yes|yeah|yep)[.,!?]*$/.test(speech)
-    || /\b(?:i did(?!\s+not\b)|i made|i paid for|i recognize|i authorized|it was me|that's mine)\b/.test(speech);
+  const saysNo = /^(?:no|nope|nah)[.,!?]*$/.test(speech)
+    || /^(?:(?:no|nope|nah)[,.\s]*)?i\s+(?:didn't|did not)[.!?]*$/.test(speech);
+  const saysYes = /^(?:yes|yeah|yep)[.,!?]*$/.test(speech);
+  const unrecognized = saysNo
+    || /\b(?:didn't|did not|don't|do not|can't|cannot)\s+(?:make|recognize|authorize|approve|buy|purchase)\b/.test(speech)
+    || /\b(?:not mine|wasn't me|was not me|wasn't mine|was not mine|unauthorized|fraudulent)\b/.test(speech);
+  const recognized = saysYes
+    || /\b(?:i did(?!\s+not\b)|i made|i bought|i purchased|i paid for|i recognize|i authorized|it was me|that was me|it's mine|it is mine|that's mine|that is mine)\b/.test(speech);
+  if (saysYes && /\b(?:didn't|did not|don't|do not|wasn't|was not)\b/.test(speech)) return null;
   if (recognized === unrecognized) return null;
   return recognized ? 'recognized' : 'unrecognized';
 }
@@ -277,9 +281,11 @@ export function attachVoiceRelay(server, {
           await decisionChain;
         }
         if (activeTurn !== turn) return;
-        const decisionContext = recordedDecision
-          ? `The caller's ${recordedDecision} answer was recorded in the fictional webinar dashboard. Acknowledge that recorded answer without claiming a real account action.`
-          : 'No answer has been recorded in the fictional webinar dashboard yet. Do not claim a decision was saved; ask for a clear yes or no if needed.';
+        const decisionContext = recordedDecision === 'unrecognized'
+          ? 'The caller’s unrecognized answer was recorded in the fictional webinar dashboard, which now shows a demo fraud report. Acknowledge the answer; you may direct the caller to the app for case status. Do not claim a real account action.'
+          : recordedDecision === 'recognized'
+            ? 'The caller’s recognized answer was recorded in the fictional webinar dashboard. Acknowledge the answer; there is no fraud report to follow up on. Do not claim a real account action.'
+            : 'No answer has been recorded in the fictional webinar dashboard yet. Do not claim a decision was saved; ask for a clear yes or no if needed.';
         const messages = [{ role: 'system', content: `${VOICE_AGENT_SYSTEM_PROMPT} ${decisionContext}` }, ...history];
         for await (const chunk of streamReply({ messages, signal: controller.signal })) {
           if (activeTurn !== turn) return;

@@ -873,7 +873,7 @@ function renderOverviewVisual(topic) {
       '<div class="guide-visual-phone">' +
         '<div class="guide-visual-phone-status"><span>Incoming call</span><span>Example screen</span></div>' +
         '<div class="guide-visual-phone-mark"><img src="/twilio-bug.svg" alt="" /></div>' +
-        '<strong class="guide-visual-phone-name">Twilio</strong>' +
+        '<strong class="guide-visual-phone-name">Twilio Bank</strong>' +
         '<span class="guide-visual-phone-number">+1 (415) 555-0182</span>' +
         '<p class="guide-visual-phone-reason"><span class="guide-visual-eyebrow">Example call reason</span>' +
           '<strong>Account security update</strong></p>' +

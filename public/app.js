@@ -61,10 +61,16 @@ const SCENES = {
   unknownMissed: { chapter: 'Call attempt · Ignored', caption: 'Anthony lets the unfamiliar number ring out. The fraud question remains unanswered.', short: 'Unknown call ignored', cue: 'Anthony ignored the simulated unknown call. Now place the real branded AI call so the audience can compare the caller identity and hear the fraud question answered.' },
   brandedRinging: { chapter: 'Urgent answer · Branded Calling', caption: 'The approved business identity makes the call recognizable.', short: 'Branded call ringing', cue: 'Answer your real phone and say “No, I do not recognize that charge.” The spoken answer should update the bank app. Your Android 13 handset may show less branding than the illustration.' },
   reached: { chapter: 'Urgent answer · Recorded', caption: 'Anthony’s answer from the call is visible in the bank app.', short: 'Answer recorded', cue: 'Point to Anthony’s recorded answer. For “No,” the demo can send a lower-urgency case update next. No real card or bank case was changed.' },
-  smsSent: { chapter: 'Case update · Plain SMS', caption: 'Preview the full case-status text from a number-only sender. Anthony has not opened it.', short: 'SMS case update shown', cue: 'The urgent decision already happened by phone. This message view lets the audience read the full SMS; it does not mean Anthony opened it. The body says “Twilio Bank,” but the sender is only a phone number.' },
+  smsSent: { chapter: 'Case update · Plain SMS', caption: 'Preview the case-status text and long link from a number-only sender. Anthony has not opened it.', short: 'SMS case update shown', cue: 'The urgent decision already happened by phone. This message view lets the audience read the full SMS; it does not mean Anthony opened it. The body says “Twilio Bank” and includes a long raw URL, but the sender is only a phone number.' },
   smsIgnored: { chapter: 'Case update · SMS ignored', caption: 'Anthony hesitates over the number-only follow-up and leaves it unopened.', short: 'SMS update ignored', cue: 'Anthony’s fraud report is already recorded. He ignores this later SMS because the sender is just a number. Now show the same kind of case update from the branded RCS sender.' },
   rcsSent: { chapter: 'Case update · Branded RCS', caption: 'Twilio Bank’s recognizable sender and case link make the follow-up useful.', short: 'RCS case update shown', cue: 'Show the actual tester handset beside the illustrated Android phone. Open the simulated verified business profile if useful, then show the View case URL action. Anthony can inspect the source before opening the case page.' },
   caseViewed: { chapter: 'Case update · Viewed', caption: 'Anthony opens the fictional case-status page from the trusted update.', short: 'Case status viewed', cue: 'Point to the case-status page and its recorded phone decision. This page is a fictional banking app preview; it does not create a real fraud investigation.' },
+};
+const PHONE_ARRIVAL_KIND_BY_STEP = {
+  unknownRinging: 'call',
+  brandedRinging: 'call',
+  smsSent: 'message',
+  rcsSent: 'message',
 };
 
 let snapshot = null;
@@ -81,6 +87,7 @@ let lastPhoneCueKey = '';
 let pulsingPhoneCueKey = '';
 let phoneCuePulseTimer = null;
 let rcsProfileTab = null;
+let pendingPhoneArrivalKind = null;
 
 function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (character) => ({
@@ -389,7 +396,7 @@ function renderBank(state, config) {
   const scene = sceneFor(state);
   const flagged = state.step !== 'idle';
   const contacted = ['unknownRinging', 'unknownMissed', 'brandedRinging', 'reached', 'smsSent', 'smsIgnored', 'rcsSent'].includes(state.step);
-  const phone = renderPhone(state, config, { rcsProfileTab });
+  const phone = renderPhone(state, config, { rcsProfileTab, arrivalKind: pendingPhoneArrivalKind });
   const transactionStatus = state.chargeDecision === 'unrecognized' ? 'Fraud report received'
     : state.chargeDecision === 'recognized' ? 'Answer recorded' : 'Review needed';
 
@@ -518,11 +525,17 @@ const client = twilio(
   process.env.TWILIO_ACCOUNT_SID,
   process.env.TWILIO_AUTH_TOKEN
 );
+const caseUrl = new URL("/bank?case=1", process.env.PUBLIC_BASE_URL);
+caseUrl.searchParams.set("utm_source", "twilio_bank_transactional_notification");
+caseUrl.searchParams.set("utm_medium", "unbranded_sms_from_phone_number");
+caseUrl.searchParams.set("utm_campaign", "fraud_report_case_status_follow_up");
+caseUrl.searchParams.set("delivery_context", "security_notification_clickthrough");
+caseUrl.searchParams.set("reference", "DEMO-CASE-STATUS-000000000000000000000000000000000000000000000000000000000000");
 await client.messages.create({
   to: "+15551234567",
   messagingServiceSid: process.env.TWILIO_MESSAGING_SERVICE_SID,
   from: process.env.TWILIO_SMS_FROM,
-  body: "Twilio Bank: We received your report about the $9,800.00 Midlife Crisis Motors charge. View case status in your banking app."
+  body: "Twilio Bank: We received your report about the $9,800.00 Midlife Crisis Motors charge. View case status in your banking app: " + caseUrl.toString()
 });`;
   const messageRequest = `import twilio from "twilio";
 const client = twilio(
@@ -600,9 +613,9 @@ ws.send(JSON.stringify({
                 <p class="map-channel-summary">Name, logo, reason · ConversationRelay</p>
                 <span class="map-channel-link" aria-hidden="true">${icon('arrow', 20)}</span>
               </div>
-              <div class="call-art" aria-label="Illustrative branded incoming call from Twilio with an example call reason">
+              <div class="call-art" aria-label="Illustrative branded incoming call from Twilio Bank with an example call reason">
                 <span class="call-art-logo">${bugMark()}</span>
-                <span class="call-art-identity"><small>Incoming call</small><strong>Twilio</strong><span>Card security alert</span></span>
+                <span class="call-art-identity"><small>Incoming call</small><strong>Twilio Bank</strong><span>Card security alert</span></span>
                 <span class="call-art-answer">${icon('phone', 18)}</span>
               </div>
             </a>
@@ -847,7 +860,7 @@ function renderPresenter(state, config, phoneCue) {
         <section class="presenter-panel"><div class="panel-title"><h2>Live setup</h2><span>${icon('shield', 18)}</span></div><div class="readiness-row"><span class="readiness-indicator ${voiceReady ? 'ready' : ''}"></span><div><strong>Branded AI agent call</strong><small>${voiceReady ? `Configured ${escapeHtml(config.callerMasked || 'caller')} → ${escapeHtml(config.recipientMasked || 'recipient')} · Relay + OpenAI` : 'Set the approved number, recipient, OPENAI_API_KEY, and public relay URL (wss://) on the server'}</small></div></div><div class="readiness-row"><span class="readiness-indicator ${smsReady ? 'ready' : ''}"></span><div><strong>Case-status SMS</strong><small>${smsReady ? `Configured from ${escapeHtml(config.smsSenderMasked || 'SMS sender')} to ${escapeHtml(config.recipientMasked || 'demo recipient')}` : 'Configure an SMS sender in the Messaging Service and set TWILIO_SMS_FROM'}</small></div></div><div class="readiness-row"><span class="readiness-indicator ${rcsReady ? 'ready' : ''}"></span><div><strong>RCS case update</strong><small>${rcsReady ? `Configured for ${escapeHtml(config.recipientMasked || 'demo recipient')} · confirm tester invitation` : 'Configure an invited RCS tester and TWILIO_RCS_CASE_CONTENT_SID on the server'}</small></div></div><p class="panel-hint">Configured means values are present and well formed; it does not verify delivery, ConversationRelay onboarding, public reachability, or handset display. See <code>PRESENTER.md</code> for setup.</p></section>
         <section class="presenter-panel"><div class="panel-title"><h2>Live status and answer</h2><span>${icon('activity', 18)}</span></div><dl class="result-list"><div><dt>SMS SID</dt><dd>${escapeHtml(state.smsSid || '—')}</dd></div><div><dt>SMS status</dt><dd>${escapeHtml(state.smsStatus || '—')}</dd></div><div><dt>RCS SID</dt><dd>${escapeHtml(state.messageSid || '—')}</dd></div><div><dt>RCS request status</dt><dd>${escapeHtml(state.messageStatus || '—')}</dd></div><div><dt>RCS delivery channel</dt><dd>${escapeHtml(channelLabel)}</dd></div><div><dt>Call SID</dt><dd>${escapeHtml(state.callSid || '—')}</dd></div><div><dt>Call status</dt><dd>${escapeHtml(state.callStatus || '—')}</dd></div><div><dt>Anthony’s answer</dt><dd>${state.chargeDecision === 'recognized' ? 'Recognized purchase' : state.chargeDecision === 'unrecognized' ? 'Did not recognize' : '—'}</dd></div><div><dt>Answer source</dt><dd>${state.decisionSource === 'voice' ? 'Live voice' : state.decisionSource === 'presenter' ? 'Presenter simulation' : '—'}</dd></div></dl><p class="panel-hint">“Accepted” confirms an API request, not delivery. A completed call does not establish a purchase decision.</p></section>
         <section class="presenter-panel presenter-event-panel"><div class="panel-title"><h2>Recent events</h2><span class="event-count">${state.events.length}</span></div>${renderEventLog(state.events, 5)}</section>
-        <details class="presenter-notes"><summary>Device and channel notes</summary><p>Your Samsung Android 13 is outside Twilio’s documented Samsung Android 14+ support for US Enhanced Branded Calling. The iPhone and Android 14+ views are simulations. The approved caller name is “Twilio”; “Card security alert” illustrates a possible call reason and is not confirmed as the reason in your bundle. Twilio lists call-reason display on supported Android devices, while its iPhone entries list name and logo only.</p><p>The call reason comes from your approved Branded Calling registration, not the TwiML. ConversationRelay transcribes caller speech and voices agent replies with ElevenLabs; the application server gets responses from OpenAI. The demo can capture a spoken purchase decision; manual choices are labeled simulations.</p><p>The post-call SMS is a deliberate send from a phone-number sender. It is separate from SMS/MMS fallback if the later RCS request cannot use RCS. Before RCS approval, send only to a tester who accepted the sender invitation.</p><div><a href="${SOURCES.messagingServices}" target="_blank" rel="noopener noreferrer">Messaging Services ${icon('external', 13)}</a><a href="${SOURCES.branded}" target="_blank" rel="noopener noreferrer">Calling guide ${icon('external', 13)}</a><a href="${SOURCES.relay}" target="_blank" rel="noopener noreferrer">ConversationRelay ${icon('external', 13)}</a><a href="${SOURCES.rcsTutorial}" target="_blank" rel="noopener noreferrer">RCS tester tutorial ${icon('external', 13)}</a></div></details>
+        <details class="presenter-notes"><summary>Device and channel notes</summary><p>Your Samsung Android 13 is outside Twilio’s documented Samsung Android 14+ support for US Enhanced Branded Calling. The iPhone and Android 14+ views simulate how the fictional Twilio Bank could appear. The approved name on your real caller number is “Twilio”; “Card security alert” on the illustration is an example reason, not a confirmed value from your bundle. Twilio lists call-reason display on supported Android devices, while its iPhone entries list name and logo only.</p><p>The call reason comes from your approved Branded Calling registration, not the TwiML. ConversationRelay transcribes caller speech and voices agent replies with ElevenLabs; the application server gets responses from OpenAI. The demo can capture a spoken purchase decision; manual choices are labeled simulations.</p><p>The post-call SMS is a deliberate send from a phone-number sender. It is separate from SMS/MMS fallback if the later RCS request cannot use RCS. Before RCS approval, send only to a tester who accepted the sender invitation.</p><div><a href="${SOURCES.messagingServices}" target="_blank" rel="noopener noreferrer">Messaging Services ${icon('external', 13)}</a><a href="${SOURCES.branded}" target="_blank" rel="noopener noreferrer">Calling guide ${icon('external', 13)}</a><a href="${SOURCES.relay}" target="_blank" rel="noopener noreferrer">ConversationRelay ${icon('external', 13)}</a><a href="${SOURCES.rcsTutorial}" target="_blank" rel="noopener noreferrer">RCS tester tutorial ${icon('external', 13)}</a></div></details>
       </aside></div>
     </main>
   </div>`;
@@ -855,6 +868,8 @@ function renderPresenter(state, config, phoneCue) {
 
 function applySnapshot(next) {
   if (!next || !next.state || !next.config) return;
+  pendingPhoneArrivalKind = snapshot && snapshot.state.step !== next.state.step && next.state.audienceView === 'bank'
+    ? PHONE_ARRIVAL_KIND_BY_STEP[next.state.step] || null : null;
   if (!illustratedRcsAvailable(next.state)
     || next.state.audienceView !== 'bank'
     || snapshot?.state.step !== next.state.step
@@ -865,6 +880,7 @@ function applySnapshot(next) {
   transportError = '';
   syncAudienceRoute();
   render();
+  pendingPhoneArrivalKind = null;
 }
 
 async function loadSnapshot() {

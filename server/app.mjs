@@ -3,6 +3,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { dirname, extname, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildSmsBody, buildSmsCaseUrl } from '../public/sms-content.js';
 import { listArchitectureShotVariants } from './architecture-shots.mjs';
 import { attachVoiceRelay, createRelayTwiml, isValidElevenLabsVoiceId, isValidPublicBaseUrl, isValidRelayUrl, resolveRelayUrl } from './voice-agent.mjs';
 
@@ -82,6 +83,7 @@ function getConfig(env) {
     recipientMasked: maskNumber(env.DEMO_TO_NUMBER),
     smsSenderMasked: maskNumber(env.TWILIO_SMS_FROM),
     smsSenderDisplay: smsSenderValid ? env.TWILIO_SMS_FROM : null,
+    smsCaseUrl: buildSmsCaseUrl(env.PUBLIC_BASE_URL),
     callerMasked: maskNumber(env.TWILIO_VOICE_FROM),
     contentSidConfigured: contentValid,
   };
@@ -111,7 +113,7 @@ function freshState() {
   };
 }
 
-function createTwilioClient(env, fetchImpl) {
+function createTwilioClient(env, fetchImpl, smsCaseUrl) {
   const root = `https://api.twilio.com/2010-04-01/Accounts/${env.TWILIO_ACCOUNT_SID}`;
   const authorization = `Basic ${Buffer.from(`${env.TWILIO_ACCOUNT_SID}:${env.TWILIO_AUTH_TOKEN}`).toString('base64')}`;
 
@@ -151,7 +153,7 @@ function createTwilioClient(env, fetchImpl) {
         To: env.DEMO_TO_NUMBER,
         MessagingServiceSid: env.TWILIO_MESSAGING_SERVICE_SID,
         From: env.TWILIO_SMS_FROM,
-        Body: 'Twilio Bank: We received your report about the $9,800.00 Midlife Crisis Motors charge. View case status in your banking app.',
+        Body: buildSmsBody(smsCaseUrl),
       }, 'TWILIO_SMS_REJECTED');
       if (!SID.message.test(result?.sid ?? '')
         || typeof result?.status !== 'string'
@@ -198,7 +200,7 @@ function createTwilioClient(env, fetchImpl) {
 
 export function createDemo(env, fetchImpl, broadcast) {
   const config = getConfig(env);
-  const twilio = createTwilioClient(env, fetchImpl);
+  const twilio = createTwilioClient(env, fetchImpl, config.smsCaseUrl);
   let state = freshState();
   let sequence = 0;
   let inFlight = false;

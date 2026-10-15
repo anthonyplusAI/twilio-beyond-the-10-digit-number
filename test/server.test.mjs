@@ -14,6 +14,9 @@ const CALL_SID = `CA${'c'.repeat(32)}`;
 const SERVICE_SID = `MG${'d'.repeat(32)}`;
 const CONTENT_SID = `HX${'e'.repeat(32)}`;
 const TEST_PRESENTER_PASSWORD = 'test-only-presenter-pass';
+const DEPLOYED_ORIGIN = 'https://twilio-branded-comms.jollymushroom-29e673c9.centralus.azurecontainerapps.io';
+const SMS_CASE_PATH = '/bank?case=1&utm_source=twilio_bank_transactional_notification&utm_medium=unbranded_sms_from_phone_number&utm_campaign=fraud_report_case_status_follow_up&delivery_context=security_notification_clickthrough&reference=DEMO-CASE-STATUS-000000000000000000000000000000000000000000000000000000000000';
+const SMS_BODY_PREFIX = 'Twilio Bank: We received your report about the $9,800.00 Midlife Crisis Motors charge. View case status in your banking app: ';
 
 const liveEnv = {
   TWILIO_ACCOUNT_SID: ACCOUNT_SID,
@@ -560,6 +563,7 @@ test('live SMS uses the configured number in the Messaging Service and records A
     assert.equal(config.smsReady, true);
     assert.equal(config.smsSenderMasked, '•••• 0102');
     assert.equal(config.smsSenderDisplay, '+14155550102');
+    assert.equal(config.smsCaseUrl, `https://demo.example.test${SMS_CASE_PATH}`);
     await toReached(base);
 
     const unauthorized = await fetch(`${base}/api/action`, {
@@ -584,13 +588,25 @@ test('live SMS uses the configured number in the Messaging Service and records A
     assert.equal(form.get('To'), '+14155550199');
     assert.equal(form.get('MessagingServiceSid'), SERVICE_SID);
     assert.equal(form.get('From'), '+14155550102');
-    assert.equal(form.get('Body'), 'Twilio Bank: We received your report about the $9,800.00 Midlife Crisis Motors charge. View case status in your banking app.');
+    assert.equal(form.get('Body'), `${SMS_BODY_PREFIX}https://demo.example.test${SMS_CASE_PATH}`);
     assert.equal(form.has('ContentSid'), false);
+    assert.equal(form.has('ShortenUrls'), false);
     assert.equal(result.body.state.events.at(-1).kind, 'real');
     assert.match(result.body.state.events.at(-1).title, /SMS/i);
     assert.match(result.body.state.events.at(-1).title, /accepted/i);
     assert.doesNotMatch(result.body.state.events.at(-1).title, /delivered/i);
-  }, { env: liveEnv, fetchImpl });
+  }, { env: { ...liveEnv, PUBLIC_BASE_URL: 'https://demo.example.test', TWILIO_CONVERSATION_RELAY_URL: 'wss://demo.example.test/voice-relay' }, fetchImpl });
+});
+
+test('SMS case link falls back to the deployed HTTPS site and its query still opens the case page', async () => {
+  await withServer(async (base) => {
+    const { smsCaseUrl } = (await snapshot(base)).config;
+    assert.equal(smsCaseUrl, `${DEPLOYED_ORIGIN}${SMS_CASE_PATH}`);
+    assert.ok(smsCaseUrl.length > 300);
+    const target = new URL(smsCaseUrl);
+    assert.equal(target.searchParams.get('case'), '1');
+    assert.equal((await fetch(`${base}${target.pathname}${target.search}`)).status, 200);
+  }, { env: liveEnv });
 });
 
 test('an invalid SMS sender is omitted from audience configuration', async () => {

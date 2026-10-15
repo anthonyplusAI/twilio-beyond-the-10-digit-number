@@ -163,6 +163,9 @@ function sceneFor(state) {
       : { ...scene, caption: 'Anthony recognized the purchase; the demo ends without a fraud-case update.', short: 'Purchase recognized', cue: `${spoken ? 'The live voice answer updated the bank app automatically.' : 'This is a presenter-selected simulation of Anthony’s answer.'} Point to the recorded response. There is no fraud report to follow up on, so move to the architecture summary.` };
   }
   if (state.step === 'smsSent') {
+    if (state.smsMode === 'live' && String(state.smsStatus || '').toLowerCase() === 'scheduled') {
+      return { ...scene, short: 'SMS scheduled for later', caption: 'Twilio scheduled this SMS; it has not reached the phone. The illustrated conversation is a preview.', cue: 'Do not present the message as received. Refresh SMS status to check for a change. If it remains scheduled, explain that the number-only message on screen is a simulation and continue the story.' };
+    }
     if (state.smsMode === 'live' && ['failed', 'undelivered', 'canceled'].includes(String(state.smsStatus || '').toLowerCase())) {
       return { ...scene, short: 'SMS not delivered', caption: 'Twilio reports that the case update did not reach the phone. The message view remains illustrative.', cue: 'The live SMS did not arrive. Show the request status, then continue the fictional follow-up using the simulated message preview.' };
     }
@@ -252,7 +255,7 @@ function phoneCueFor(state, config) {
     return { key: 'ready:rcs', label: 'Real phone step', detail: pendingAction === 'sendRcs' ? 'Sending the case update to your test phone…' : 'Click Send live RCS to send the branded case update to your test phone.' };
   }
   if (state.step === 'smsSent' && state.smsMode === 'live') {
-    if (['failed', 'undelivered', 'canceled'].includes(String(state.smsStatus || '').toLowerCase())) return null;
+    if (['scheduled', 'failed', 'undelivered', 'canceled'].includes(String(state.smsStatus || '').toLowerCase())) return null;
     return { key: `sms:${state.smsSid || 'pending'}`, label: 'Check your phone now', detail: String(state.smsStatus || '').toLowerCase() === 'delivered' ? 'Look for the SMS from a phone number. Twilio reports delivery.' : 'Look for the SMS from a phone number. Twilio accepted the request; delivery is not confirmed yet.' };
   }
   if (state.step === 'rcsSent' && state.messageMode === 'live') {
@@ -771,7 +774,7 @@ function presenterButton(action, label, options = {}) {
   const unavailable = options.live && options.unavailable ? ' action-unavailable' : '';
   const selected = pendingAction === action ? ' action-pending' : '';
   const badge = options.live ? `<span class="action-kind">${options.unavailable ? 'Setup needed' : 'Real phone'}</span>` : options.simulated ? `<span class="action-kind action-kind-sim">Simulation</span>` : '';
-  const note = options.unavailable || (options.futureStep ? `Unlocks at step ${options.futureStep}` : '');
+  const note = options.unavailable || options.note || (options.futureStep ? `Unlocks at step ${options.futureStep}` : '');
   return `<button type="button" class="action-button${primary}${live}${future}${unavailable}${selected}" data-action="${escapeHtml(action)}" ${disabled ? 'disabled' : ''}><span class="action-button-label">${escapeHtml(pendingAction === action ? 'Working…' : label)}${note ? `<small>${escapeHtml(note)}</small>` : ''}</span>${badge}</button>`;
 }
 
@@ -798,7 +801,7 @@ function renderNextActions(state, config) {
         : state.audienceView === 'architecture'
           ? presenterButton('showTechnicalNotes', 'Show setup guide', { primary: true })
           : `<span class="story-complete" role="status">${icon('check', 17)} Story complete</span>`;
-    case 'smsSent': return presenterButton('ignoreSms', 'Anthony ignores SMS', { primary: true, simulated: true });
+    case 'smsSent': return `${state.smsMode === 'live' ? presenterButton('refreshStatuses', 'Refresh SMS status') : ''}${presenterButton('ignoreSms', 'Anthony ignores SMS', { primary: true, simulated: true })}`;
     case 'smsIgnored': return `${presenterButton('sendRcs', 'Send live RCS', { primary: config.rcsReady, disabled: !config.rcsReady, live: true, unavailable: !config.rcsReady && 'Configure RCS to enable' })}${presenterButton('previewRcs', 'Show RCS preview', { primary: !config.rcsReady, simulated: true })}`;
     case 'rcsSent': return `${presenterButton('viewCase', 'View case status', { primary: true, simulated: true })}${renderRcsFallbackToggle(state)}`;
     case 'caseViewed': return state.audienceView === 'bank'
@@ -850,7 +853,7 @@ function renderPresenter(state, config, phoneCue) {
           ${presenterButton('ignoreSms', 'Anthony ignores the SMS', { disabled: step !== 'smsSent', primary: step === 'smsSent', simulated: true })}
         </div></section>
         <section class="control-group"><div class="group-heading"><span>05</span><div><h2>The branded RCS case update</h2><p>Anthony can check the sender and open the fictional case page from a rich card.</p></div></div><div class="action-stack">
-          <div class="action-stack two-up">${presenterButton('sendRcs', 'Send live rich RCS', { disabled: !canRcs || !rcsReady, primary: canRcs && rcsReady, live: true, futureStep: rcsFutureStep, unavailable: !rcsReady && 'Configure RCS to enable' })}${presenterButton('previewRcs', 'Show RCS preview', { disabled: !canRcs, primary: canRcs && !rcsReady, simulated: true })}</div>
+          <div class="action-stack two-up">${presenterButton('sendRcs', 'Send live rich RCS', { disabled: !canRcs || !rcsReady, primary: canRcs && rcsReady, live: true, futureStep: rcsFutureStep, note: step === 'smsSent' && rcsReady ? 'Click Anthony ignores the SMS first' : '', unavailable: !rcsReady && 'Configure RCS to enable' })}${presenterButton('previewRcs', 'Show RCS preview', { disabled: !canRcs, primary: canRcs && !rcsReady, simulated: true })}</div>
           ${renderRcsFallbackToggle(state)}
           ${presenterButton('viewCase', 'Open fictional case page', { disabled: step !== 'rcsSent', primary: step === 'rcsSent', simulated: true })}
         </div></section>
@@ -868,13 +871,21 @@ function renderPresenter(state, config, phoneCue) {
 
 function applySnapshot(next) {
   if (!next || !next.state || !next.config) return;
+  const serverRestarted = !isPresenter && !customerViewPinned
+    && next.state.audienceViewRevision === 0
+    && audiencePaths.has(window.location.pathname)
+    && (snapshot?.state.audienceViewRevision > 0
+      || (!snapshot && (window.location.pathname === '/architecture'
+        || window.location.pathname === '/architecture/details'
+        || bankCaseRequested)));
   pendingPhoneArrivalKind = snapshot && snapshot.state.step !== next.state.step && next.state.audienceView === 'bank'
     ? PHONE_ARRIVAL_KIND_BY_STEP[next.state.step] || null : null;
   if (!illustratedRcsAvailable(next.state)
     || next.state.audienceView !== 'bank'
     || snapshot?.state.step !== next.state.step
     || snapshot?.state.audienceViewRevision !== next.state.audienceViewRevision) rcsProfileTab = null;
-  if (snapshot && (snapshot.state.audienceView !== next.state.audienceView
+  if (serverRestarted) audiencePathOverride = window.location.pathname;
+  else if (snapshot && (snapshot.state.audienceView !== next.state.audienceView
     || snapshot.state.audienceViewRevision !== next.state.audienceViewRevision)) audiencePathOverride = null;
   snapshot = next;
   transportError = '';

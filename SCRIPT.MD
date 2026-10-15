@@ -96,7 +96,7 @@ This run takes the **“No, not mine”** branch. A clear “Yes, I made it” i
 
 ## 14:00–16:00 — The number-only update feels uncertain
 
-**Screen:** In Presenter, click **Send live SMS** or **Show SMS preview**. The illustrated Messages conversation displays the full text as a presenter preview; Anthony has not opened it. Show the live phone if sent. Then click **Anthony ignores SMS** to show his unread notification.
+**Screen:** In Presenter, click **Send live SMS** or **Show SMS preview**. For a live send, click **Refresh SMS status** and show the handset only if it arrives. If Twilio reports **scheduled**, say it has not reached the phone and use the illustrated conversation as a preview. Anthony has not opened it. Then click **Anthony ignores SMS** to show his unread notification in the fictional story.
 
 > Here's the case-status SMS from a phone number. I'm opening the simulated conversation so you can read the full message; Anthony hasn't opened it. It says the bank received his report, and then there's this long, messy link to the case page. If I see “Twilio Bank” in a text from an unfamiliar number, that name and link alone don't prove who sent it. Anthony pauses and leaves it unopened.
 >
@@ -204,11 +204,12 @@ await client.messages.create({
   to: "+15551234567",
   from: "+18885550123",
   messagingServiceSid: "MGXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+  messageIntent: "notifications",
   body: "Twilio Bank: We received your report about the $9,800.00 Midlife Crisis Motors charge. View case status in your banking app: " + caseUrl.toString()
 });
 ~~~
 
-This deliberate number-based SMS is a separate send. It is not an RCS fallback. The URL remains visible because this send does not request link shortening. [Messages API](https://www.twilio.com/docs/messaging/api/message-resource) · [Messaging Service senders](https://www.twilio.com/docs/messaging/services) · [Link Shortening](https://www.twilio.com/docs/messaging/features/link-shortening)
+This deliberate number-based SMS is a separate send. It is not an RCS fallback. The URL remains visible because this send does not request link shortening. `messageIntent: "notifications"` classifies the case-status message as an account notification for Twilio Compliance Toolkit; **accepted** and **scheduled** still do not mean delivered. [Messages API](https://www.twilio.com/docs/messaging/api/message-resource) · [Compliance Toolkit](https://www.twilio.com/docs/messaging/features/compliance-toolkit) · [Messaging Service senders](https://www.twilio.com/docs/messaging/services) · [Link Shortening](https://www.twilio.com/docs/messaging/features/link-shortening)
 
 ### New case-status Content Template
 

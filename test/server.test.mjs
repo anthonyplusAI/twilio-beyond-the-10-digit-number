@@ -589,6 +589,7 @@ test('live SMS uses the configured number in the Messaging Service and records A
     assert.equal(form.get('MessagingServiceSid'), SERVICE_SID);
     assert.equal(form.get('From'), '+14155550102');
     assert.equal(form.get('Body'), `${SMS_BODY_PREFIX}https://demo.example.test${SMS_CASE_PATH}`);
+    assert.equal(form.get('MessageIntent'), 'notifications');
     assert.equal(form.has('ContentSid'), false);
     assert.equal(form.has('ShortenUrls'), false);
     assert.equal(result.body.state.events.at(-1).kind, 'real');

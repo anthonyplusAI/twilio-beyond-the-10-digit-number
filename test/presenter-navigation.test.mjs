@@ -178,6 +178,20 @@ test('the case-status SMS remains number-only and is tracked separately from RCS
   assert.match(audience.root.innerHTML, /<strong>\+1 \(888\) 437-9561<\/strong>/);
 });
 
+test('scheduled SMS is called out before the presenter expects a phone delivery', async () => {
+  const app = await boot('/presenter', state({ step: 'smsSent', smsMode: 'live', smsSid: 'SM123', smsStatus: 'scheduled' }));
+
+  assert.match(app.root.innerHTML, /SMS scheduled for later/);
+  assert.match(app.root.innerHTML, /has not reached the phone/);
+  assert.doesNotMatch(app.root.innerHTML, /Check your phone now/);
+  assert.match(currentActions(app.root.innerHTML), /data-action="refreshStatuses"/);
+  assert.match(currentActions(app.root.innerHTML), /data-action="ignoreSms"/);
+
+  app.send(state({ step: 'smsSent', smsMode: 'live', smsSid: 'SM123', smsStatus: 'delivered' }));
+  assert.match(app.root.innerHTML, /SMS delivered/);
+  assert.match(app.root.innerHTML, /Check your phone now/);
+});
+
 test('after SMS is ignored, the next real-phone step sends a branded RCS case update', async () => {
   const app = await boot('/presenter', state({ step: 'smsIgnored' }), { config: { rcsReady: true } });
 

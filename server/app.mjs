@@ -154,6 +154,7 @@ function createTwilioClient(env, fetchImpl, smsCaseUrl) {
         MessagingServiceSid: env.TWILIO_MESSAGING_SERVICE_SID,
         From: env.TWILIO_SMS_FROM,
         Body: buildSmsBody(smsCaseUrl),
+        MessageIntent: 'notifications',
       }, 'TWILIO_SMS_REJECTED');
       if (!SID.message.test(result?.sid ?? '')
         || typeof result?.status !== 'string'

@@ -12,7 +12,7 @@
     "check": "node --check public/app.js && node --check public/architecture-guide.js && node --check public/phone.js && node --check server/app.mjs && node --check server/index.mjs && node --check server/voice-agent.mjs && node --check scripts/create-rcs-template.mjs"
   },
   "engines": {
-    "node": ">=22"
+    "node": "^22.23.4 || ^24.22.1 || ^26.12.1"
   },
   "dependencies": {
     "openai": "7.32.0",

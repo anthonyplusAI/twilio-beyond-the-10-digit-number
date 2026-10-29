@@ -21,7 +21,7 @@ The bank website, merchant, charge, case, and illustrated phone screens are simu
 
 ## Replay the simulation yourself
 
-You need Node.js 22 or newer. From this project folder, run:
+Use Node.js 22.23.4, matching CI and the container image. From this project folder, run:
 
     cp .env.example .env
     npm install
